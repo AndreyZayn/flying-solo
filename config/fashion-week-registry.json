@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "events": [
+    { "code": "NYFW", "label": "New York Fashion Week" },
+    { "code": "PFW", "label": "Paris Fashion Week" },
+    { "code": "MFW", "label": "Milan Fashion Week" }
+  ],
+  "categories": [
+    {
+      "id": "Clothing",
+      "label": "Clothing",
+      "aliases": ["clothing"],
+      "fullPrice": 6900,
+      "accessoryClause": false
+    },
+    {
+      "id": "Accessory",
+      "label": "Accessory",
+      "aliases": ["accessory", "acc"],
+      "fullPrice": 4900,
+      "accessoryClause": true
+    },
+    {
+      "id": "Jewelry",
+      "label": "Jewelry",
+      "aliases": ["jewelry"],
+      "fullPrice": 4900,
+      "accessoryClause": true
+    },
+    {
+      "id": "Shoes",
+      "label": "Shoes",
+      "aliases": ["shoes"],
+      "fullPrice": 4900,
+      "accessoryClause": true
+    },
+    {
+      "id": "Bags",
+      "label": "Bags",
+      "aliases": ["bags"],
+      "fullPrice": 4900,
+      "accessoryClause": true
+    }
+  ],
+  "grant": {
+    "label": "Fashion Forward Fund Grant Applied",
+    "defaultAmount": 2000
+  }
+}

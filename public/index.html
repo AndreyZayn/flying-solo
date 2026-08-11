@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fashion Week Contract Builder</title>
+    <link rel="stylesheet" href="/vendor/toastui-editor.min.css">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Fashion Week Contract Builder</h1>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-panel">
+        <div class="status-row">
+          <span id="statusBadge" class="status-badge">Ready</span>
+        </div>
+
+        <form id="contractForm">
+          <div class="field-row two-up">
+            <label><span class="field-label">Fashion week <span class="source-indicator" data-source-field="eventCode" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><select id="eventCode" name="eventCode"></select></label>
+            <label><span class="field-label">Event month <span class="source-indicator" data-source-field="eventMonth" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="eventMonth" name="eventMonth" type="month" value="2027-02"></label>
+          </div>
+          <label><span class="field-label">Brand <span class="source-indicator" data-source-field="brand" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="brand" name="brand" value="Mumtoz Mariam"></label>
+          <div class="copy-field">
+            <label><span class="field-label">Brand representative name <span class="source-indicator" data-source-field="representative" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="representative" name="representative" value="Mumtoz Mastura Kuzieva Fozilovna"></label>
+            <button id="copyRepresentative" class="copy-field-button" type="button" aria-label="Copy representative name">Copy</button>
+          </div>
+          <div class="copy-field">
+            <label><span class="field-label">Brand representative email <span class="source-indicator" data-source-field="representativeEmail" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="representativeEmail" name="representativeEmail" type="email" value="mumtozmastura@gmail.com"></label>
+            <button id="copyRepresentativeEmail" class="copy-field-button" type="button" aria-label="Copy representative email">Copy</button>
+          </div>
+          <label><span class="field-label">Brand category <span class="source-indicator" data-source-field="category" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><select id="category" name="category"></select></label>
+
+          <label class="toggle-row">
+            <input id="grantEnabled" name="grantEnabled" type="checkbox" checked>
+            <span class="field-label">Fashion Forward Fund grant <span class="source-indicator" data-source-field="grantEnabled" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span>
+          </label>
+          <div id="grantControls" class="field-row two-up">
+            <label>Grant amount
+              <select id="grantPreset" name="grantPreset">
+                <option value="2000">$2,000</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label id="customGrantField" hidden>Custom amount<input id="customGrantAmount" name="customGrantAmount" type="number" min="1" step="1" value="2000"></label>
+          </div>
+
+          <section class="price-card" aria-label="Calculated price">
+            <div><span>Full participation cost</span><strong id="fullPrice">—</strong></div>
+            <div id="grantSummary"><span>Grant</span><strong id="grantValue">—</strong></div>
+            <div class="balance"><span>Remaining balance</span><strong id="remainingBalance">—</strong></div>
+          </section>
+
+          <section class="payments-section">
+            <h3>Payment schedule <span class="source-indicator" data-source-field="paymentSchedule" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></h3>
+            <label>Send date<input id="sendDate" name="sendDate" type="date"></label>
+            <div class="payment-grid payment-head"><span>Due date</span><span>Amount</span></div>
+            <div class="payment-grid"><input class="payment-date" aria-label="Payment 1 due date" type="date"><input class="payment-amount" aria-label="Payment 1 amount" type="number" min="0" step="0.01"></div>
+            <div class="payment-grid"><input class="payment-date" aria-label="Payment 2 due date" type="date"><input class="payment-amount" aria-label="Payment 2 amount" type="number" min="0" step="0.01"></div>
+            <div class="payment-grid"><input class="payment-date" aria-label="Payment 3 due date" type="date"><input class="payment-amount" aria-label="Payment 3 amount" type="number" min="0" step="0.01"></div>
+          </section>
+        </form>
+
+        <section id="placeholderLibrary" class="placeholder-library" aria-labelledby="placeholderLibraryTitle">
+          <h3 id="placeholderLibraryTitle">Placeholders</h3>
+          <input id="placeholderSearch" type="search" placeholder="Find a placeholder" aria-label="Find a placeholder">
+          <div id="placeholderList" class="placeholder-list"></div>
+        </section>
+      </aside>
+
+      <section class="document-panel">
+        <div class="output-bar">
+          <div class="title-output">
+            <span class="field-caption">Contract title</span>
+            <strong id="contractTitle">Generating…</strong>
+          </div>
+          <button id="copyTitle" class="secondary-button" type="button">Copy title</button>
+        </div>
+
+        <div class="document-toolbar">
+          <div class="tabs">
+            <button id="editorTab" class="tab active" type="button" aria-pressed="true">Editor</button>
+            <button id="previewTab" class="tab" type="button" aria-pressed="false" disabled>Preview</button>
+          </div>
+          <button id="copyMarkdown" class="primary-button" type="button" disabled>Copy Markdown</button>
+        </div>
+
+        <div id="errorMessage" class="error-message" hidden></div>
+        <div id="editorPanel" class="editor-panel">
+          <div id="wysiwygEditor" aria-label="Contract editor"></div>
+          <div id="editorResizeHandle" class="editor-resize-handle" role="separator" aria-label="Resize contract editor" aria-orientation="horizontal"></div>
+        </div>
+        <div id="previewPanel" hidden>
+          <article id="contractDocument" class="contract-document"></article>
+        </div>
+
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/vendor/toastui-editor-all.min.js"></script>
+    <script src="/vendor/marked.umd.js"></script>
+    <script src="/vendor/purify.min.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

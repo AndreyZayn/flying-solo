@@ -1,0 +1,199 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { createAppServer } from "../server.mjs";
+
+async function startServer() {
+  const server = createAppServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const { port } = server.address();
+  return { server, baseUrl: `http://127.0.0.1:${port}` };
+}
+
+test("serves the dashboard and registry", async (context) => {
+  const { server, baseUrl } = await startServer();
+  context.after(() => server.close());
+
+  const page = await fetch(baseUrl);
+  assert.equal(page.status, 200);
+  const pageHtml = await page.text();
+  assert.match(pageHtml, /Fashion Week Contract Builder/);
+  assert.match(pageHtml, /id="eventMonth"[^>]+type="month"/);
+  assert.match(pageHtml, /id="grantPreset"/);
+  assert.match(pageHtml, /Brand representative name/);
+  assert.match(pageHtml, /id="representative"[^>]+value="Mumtoz Mastura Kuzieva Fozilovna"/);
+  assert.match(pageHtml, /id="representativeEmail"[^>]+type="email"[^>]+value="mumtozmastura@gmail\.com"/);
+  assert.match(pageHtml, /id="copyRepresentative"/);
+  assert.match(pageHtml, /id="copyRepresentativeEmail"/);
+  assert.match(pageHtml, /href="\/vendor\/toastui-editor\.min\.css"/);
+  assert.match(pageHtml, /src="\/vendor\/toastui-editor-all\.min\.js"/);
+  assert.match(pageHtml, /src="\/vendor\/marked\.umd\.js"/);
+  assert.match(pageHtml, /src="\/vendor\/purify\.min\.js"/);
+  assert.match(pageHtml, /id="wysiwygEditor"[^>]+aria-label="Contract editor"/);
+  assert.match(pageHtml, /id="editorResizeHandle"[^>]+role="separator"[^>]+aria-label="Resize contract editor"/);
+  assert.match(pageHtml, /id="editorPanel"/);
+  assert.match(pageHtml, /id="previewPanel"[^>]+hidden/);
+  assert.match(pageHtml, /id="previewTab"[^>]+disabled[^>]*>Preview<\/button>/);
+  assert.match(pageHtml, /id="copyMarkdown"[^>]+disabled[^>]*>Copy Markdown<\/button>/);
+  assert.match(pageHtml, /aria-label="Payment 1 due date"/);
+  assert.match(pageHtml, /aria-label="Payment 1 amount"/);
+  assert.match(pageHtml, /aria-label="Payment 2 due date"/);
+  assert.match(pageHtml, /aria-label="Payment 2 amount"/);
+  assert.match(pageHtml, /aria-label="Payment 3 due date"/);
+  assert.match(pageHtml, /aria-label="Payment 3 amount"/);
+  const sourceIndicators = pageHtml.match(/class="source-indicator"/g) ?? [];
+  assert.equal(sourceIndicators.length, 8);
+  for (const field of [
+    "eventCode",
+    "eventMonth",
+    "brand",
+    "category",
+    "representative",
+    "representativeEmail",
+    "grantEnabled",
+    "paymentSchedule",
+  ]) {
+    assert.match(
+      pageHtml,
+      new RegExp(`data-source-field="${field}"[^>]+data-tooltip="Sourced from Flying Solo data"[^>]+aria-label="Sourced from Flying Solo data"[^>]+tabindex="0"`),
+    );
+  }
+  assert.match(pageHtml, /id="placeholderLibrary"[^>]+class="placeholder-library"/);
+  assert.match(pageHtml, /id="placeholderSearch"[^>]+placeholder="Find a placeholder"/);
+  assert.match(pageHtml, /id="placeholderList"/);
+  assert.ok(pageHtml.indexOf('id="placeholderLibrary"') > pageHtml.indexOf('class="payments-section"'));
+  assert.doesNotMatch(pageHtml, /role="tablist"/);
+  assert.ok(pageHtml.indexOf('id="copyMarkdown"') > pageHtml.indexOf('class="document-toolbar"'));
+  assert.ok(pageHtml.indexOf('id="copyMarkdown"') < pageHtml.indexOf('id="editorPanel"'));
+  assert.doesNotMatch(pageHtml, /class="actions"/);
+  assert.doesNotMatch(pageHtml, /VARIABLE FIELDS|Highlighted values are not copied|Localhost only|Clean preview|Copy HTML body/);
+
+  const config = await fetch(`${baseUrl}/api/config`).then((response) => response.json());
+  assert.equal(config.categories[0].fullPrice, 6900);
+
+  const placeholderRegistry = await fetch(`${baseUrl}/api/placeholders`).then((response) => response.json());
+  assert.equal(placeholderRegistry.length, 18);
+  assert.deepEqual(
+    placeholderRegistry.find((placeholder) => placeholder.key === "BRAND_NAME"),
+    {
+      key: "BRAND_NAME",
+      label: "Brand name",
+      description: "The participating brand named in the agreement.",
+      type: "value",
+      group: "Contract details",
+    },
+  );
+  assert.equal(
+    placeholderRegistry.find((placeholder) => placeholder.key === "GRANT_ENABLED").type,
+    "condition",
+  );
+
+  const template = await fetch(`${baseUrl}/api/template`);
+  assert.equal(template.status, 200);
+  assert.match(template.headers.get("content-type"), /^text\/markdown/);
+  assert.match(await template.text(), /^## EVENT AGREEMENT/m);
+
+  const editorBundle = await fetch(`${baseUrl}/vendor/toastui-editor-all.min.js`);
+  assert.equal(editorBundle.status, 200);
+  const editorBundleSource = await editorBundle.text();
+  assert.match(editorBundleSource, /toastui/);
+  assert.doesNotMatch(editorBundleSource, /root\[undefined\]/);
+
+  const markdownBundle = await fetch(`${baseUrl}/vendor/marked.umd.js`);
+  assert.equal(markdownBundle.status, 200);
+  assert.match(await markdownBundle.text(), /marked/);
+
+  const appSource = await fetch(`${baseUrl}/app.js`).then((response) => response.text());
+  assert.match(appSource, /new toastui\.Editor\(/);
+  assert.match(appSource, /from "\/editor-sizing\.mjs"/);
+  assert.match(appSource, /from "\/placeholder-library\.mjs"/);
+  assert.match(appSource, /fetch\("\/api\/placeholders"\)/);
+  assert.match(appSource, /contractEditor\.insertText\(placeholderInsertionText\(placeholder\)\)/);
+  assert.match(appSource, /displayPlaceholderValue\(placeholder, currentResult\?\.placeholders/);
+  assert.match(appSource, /matchesPlaceholder\(placeholder, placeholderSearch\.value\)/);
+  assert.match(appSource, /contractEditor\.setHeight\(/);
+  assert.match(appSource, /querySelector\("\.toastui-editor-ww-container \.ProseMirror"\)/);
+  assert.match(appSource, /contractEditor\.on\("change", fitEditorToDocument\)/);
+  assert.match(appSource, /window\.addEventListener\("resize", fitEditorToDocument\)/);
+  assert.match(appSource, /isResizeHandlePointer\(/);
+  assert.match(appSource, /editorResizeHandle\.addEventListener\("pointerdown", beginEditorResize\)/);
+  assert.match(appSource, /setPointerCapture\(/);
+  assert.match(appSource, /document\.addEventListener\("pointermove", resizeEditor\)/);
+  assert.match(appSource, /document\.removeEventListener\("pointermove", resizeEditor\)/);
+  assert.match(appSource, /try \{\s*editorResizeHandle\.setPointerCapture/s);
+  assert.match(appSource, /initialEditType:\s*"wysiwyg"/);
+  assert.match(appSource, /hideModeSwitch:\s*true/);
+  assert.match(appSource, /usageStatistics:\s*false/);
+  assert.match(appSource, /widgetRules/);
+  assert.match(appSource, /getMarkdown\(\)/);
+  assert.match(appSource, /marked\.parse\(/);
+  assert.doesNotMatch(appSource, /Editor\.factory\(/);
+  assert.match(appSource, /resolveMarkdownTemplate\(/);
+  assert.match(appSource, /DOMPurify\.sanitize\(/);
+  assert.match(appSource, /function renderPreview\(\)\s*\{\s*documentElement\.replaceChildren\(\);\s*const markdown/s);
+  assert.match(appSource, /Markdown copied/);
+  assert.match(appSource, /new ClipboardItem\(/);
+  assert.match(appSource, /"text\/plain"/);
+  assert.match(appSource, /"text\/html"/);
+  assert.match(appSource, /navigator\.clipboard\.write\(/);
+  assert.match(appSource, /new AbortController\(\)/);
+  assert.match(appSource, /generateRevision/);
+  assert.match(appSource, /copyMarkdownButton\.disabled = true/);
+  assert.match(appSource, /previewTab\.disabled = true/);
+  assert.match(appSource, /initialize\(\)\.catch\(showError\)/);
+  assert.doesNotMatch(pageHtml, /EasyMDE|easymde/);
+  assert.doesNotMatch(appSource, /EasyMDE|codemirror/);
+
+  const styles = await fetch(`${baseUrl}/styles.css`).then((response) => response.text());
+  assert.match(styles, /\.contract-document\s*\{[^}]*max-width:\s*1240px[^}]*padding:\s*64px[^}]*background:\s*var\(--paper\)[^}]*color:\s*var\(--ink\)[^}]*font-family:\s*system-ui[^}]*font-size:\s*16px[^}]*line-height:\s*1\.6/s);
+  assert.match(styles, /\.contract-document p\s*\{[^}]*margin:\s*16px 0/s);
+  assert.match(styles, /\.contract-document h2\s*\{[^}]*font-size:\s*16px[^}]*font-weight:\s*400/s);
+  assert.match(styles, /\.contract-document h3\s*\{[^}]*margin:\s*16px 0 0[^}]*font-size:\s*16px[^}]*font-weight:\s*700/s);
+  assert.match(styles, /\.contract-document h3 \+ p\s*\{[^}]*margin-top:\s*0/s);
+  assert.match(styles, /\.contract-document ul\s*\{[^}]*margin:\s*16px 0[^}]*padding-left:\s*40px/s);
+  assert.match(styles, /\.toastui-editor-ww-container \.ProseMirror\s*\{[^}]*font-size:\s*14px[^}]*line-height:\s*1\.5/s);
+  assert.match(styles, /\.contract-placeholder-widget\s*\{[^}]*background:\s*var\(--accent-soft\)/s);
+  assert.match(styles, /\.editor-panel \.toastui-editor-defaultUI\s*\{[^}]*resize:\s*vertical[^}]*min-height:\s*360px/s);
+  assert.match(styles, /\.editor-resize-handle\s*\{[^}]*cursor:\s*ns-resize/s);
+  assert.match(styles, /\.placeholder-library\s*\{[^}]*margin-top:/s);
+  assert.match(styles, /\.placeholder-item\s*\{[^}]*border:/s);
+  assert.match(styles, /\.placeholder-token\s*\{[^}]*font-family:/s);
+  assert.match(styles, /\.source-indicator\s*\{[^}]*color:\s*var\(--accent\)[^}]*font-size:/s);
+  assert.match(styles, /\.source-indicator::after\s*\{[^}]*content:\s*attr\(data-tooltip\)[^}]*opacity:\s*0/s);
+  assert.match(styles, /\.source-indicator:hover::after,[\s\S]*\.source-indicator:focus-visible::after\s*\{[^}]*opacity:\s*1/s);
+});
+
+test("generates title and Markdown placeholders through the local API", async (context) => {
+  const { server, baseUrl } = await startServer();
+  context.after(() => server.close());
+
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      eventCode: "PFW",
+      eventMonth: "February 2027",
+      brand: "Example Brand",
+      representative: "Example Person",
+      category: "Clothing",
+      grantEnabled: true,
+      grantAmount: 2000,
+      payments: [
+        { dueDate: "2026-08-16", amount: 1700 },
+        { dueDate: "2026-10-15", amount: 1600 },
+        { dueDate: "2027-01-07", amount: 1600 }
+      ]
+    }),
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.title, "FLYING SOLO - PFW - Feb 2027 - Example Brand - (grant)");
+  assert.equal(result.placeholders.FULL_PRICE, "$6,900");
+  assert.equal(result.placeholders.GRANT_AMOUNT, "$2,000");
+  assert.equal(result.placeholders.REMAINING_BALANCE, "$4,900");
+  assert.equal(result.placeholders.GRANT_ENABLED, true);
+  assert.equal(result.placeholders.BRAND_NAME, "Example Brand");
+});
