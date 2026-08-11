@@ -33,7 +33,6 @@ const copyMarkdownButton = document.querySelector("#copyMarkdown");
 const toast = document.querySelector("#toast");
 const placeholderSearch = document.querySelector("#placeholderSearch");
 const placeholderList = document.querySelector("#placeholderList");
-const editControls = document.querySelector("#editControls");
 const reviewQueueElement = document.querySelector("#reviewQueue");
 const reviewProgress = document.querySelector("#reviewProgress");
 const batchComplete = document.querySelector("#batchComplete");
@@ -138,9 +137,9 @@ function selectedRecord() {
   return reviewQueue?.records.find((record) => record.id === selectedRecordId);
 }
 
-function setReviewLocked(locked) {
-  form.querySelectorAll("input, select").forEach((control) => { control.disabled = locked; });
-  verifyContractButton.disabled = locked || !currentResult;
+function syncFieldEditability() {
+  const inputEditable = view === "editor" && selectedRecord()?.status !== "verified";
+  form.querySelectorAll("input, select").forEach((control) => { control.disabled = !inputEditable; });
 }
 
 function updatePriceSummary() {
@@ -295,7 +294,7 @@ function renderPreview() {
 function showResult() {
   if (currentResult) titleElement.textContent = currentResult.title;
   const editorVisible = view === "editor";
-  editControls.hidden = !editorVisible;
+  placeholderLibrary.hidden = !editorVisible;
   editorPanel.hidden = !editorVisible;
   previewPanel.hidden = editorVisible;
   editorTab.classList.toggle("active", editorVisible);
@@ -304,6 +303,7 @@ function showResult() {
   previewTab.setAttribute("aria-pressed", String(!editorVisible));
   saveTemplateButton.hidden = !editorVisible;
   verifyContractButton.disabled = !currentResult || selectedRecord()?.status === "verified";
+  syncFieldEditability();
   if (editorVisible) {
     fitEditorToDocument();
     return;
@@ -377,7 +377,7 @@ async function selectRecord(recordId, { savePrevious = true } = {}) {
   contractEditor.setMarkdown(record.draftMarkdown || templateMarkdown, false);
   editorManuallySized = false;
   view = "preview";
-  setReviewLocked(record.status === "verified");
+  syncFieldEditability();
   renderReviewQueue();
   await generate();
 }
@@ -418,7 +418,7 @@ async function verifyCurrentContract() {
     selectedRecordId = undefined;
     await selectRecord(next.id, { savePrevious: false });
   } else {
-    setReviewLocked(true);
+    syncFieldEditability();
     renderReviewQueue();
   }
 }
@@ -654,8 +654,6 @@ async function initialize() {
   editorTab.addEventListener("click", () => { view = "editor"; showResult(); });
   previewTab.addEventListener("click", () => { view = "preview"; showResult(); });
   document.querySelector("#copyTitle").addEventListener("click", () => copyText(currentResult?.title, "Title copied"));
-  document.querySelector("#copyRepresentative").addEventListener("click", () => copyText(representative.value, "Representative name copied"));
-  document.querySelector("#copyRepresentativeEmail").addEventListener("click", () => copyText(representativeEmail.value, "Representative email copied"));
   copyMarkdownButton.addEventListener("click", async () => {
     try {
       await copyContract();

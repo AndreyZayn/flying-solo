@@ -25,25 +25,18 @@
           <div id="reviewQueue" class="review-queue" aria-label="Contracts to review"></div>
         </section>
 
-        <section id="editControls" class="edit-controls" hidden>
-          <div class="status-row">
-            <span id="statusBadge" class="status-badge">Ready</span>
-          </div>
+        <div class="status-row">
+          <span id="statusBadge" class="status-badge">Ready</span>
+        </div>
 
-          <form id="contractForm">
+        <form id="contractForm">
           <div class="field-row two-up">
             <label><span class="field-label">Fashion week <span class="source-indicator" data-source-field="eventCode" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><select id="eventCode" name="eventCode"></select></label>
             <label><span class="field-label">Event month <span class="source-indicator" data-source-field="eventMonth" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="eventMonth" name="eventMonth" type="month" value="2027-02"></label>
           </div>
           <label><span class="field-label">Brand <span class="source-indicator" data-source-field="brand" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="brand" name="brand" value="Mumtoz Mariam"></label>
-          <div class="copy-field">
-            <label><span class="field-label">Brand representative name <span class="source-indicator" data-source-field="representative" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="representative" name="representative" value="Mumtoz Mastura Kuzieva Fozilovna"></label>
-            <button id="copyRepresentative" class="copy-field-button" type="button" aria-label="Copy representative name">Copy</button>
-          </div>
-          <div class="copy-field">
-            <label><span class="field-label">Brand representative email <span class="source-indicator" data-source-field="representativeEmail" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="representativeEmail" name="representativeEmail" type="email" value="mumtozmastura@gmail.com"></label>
-            <button id="copyRepresentativeEmail" class="copy-field-button" type="button" aria-label="Copy representative email">Copy</button>
-          </div>
+          <label><span class="field-label">Brand representative name <span class="source-indicator" data-source-field="representative" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="representative" name="representative" value="Mumtoz Mastura Kuzieva Fozilovna"></label>
+          <label><span class="field-label">Brand representative email <span class="source-indicator" data-source-field="representativeEmail" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="representativeEmail" name="representativeEmail" type="email" value="mumtozmastura@gmail.com"></label>
           <label><span class="field-label">Brand category <span class="source-indicator" data-source-field="category" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><select id="category" name="category"></select></label>
 
           <label class="toggle-row">
@@ -74,13 +67,12 @@
             <div class="payment-grid"><input class="payment-date" aria-label="Payment 2 due date" type="date"><input class="payment-amount" aria-label="Payment 2 amount" type="number" min="0" step="0.01"></div>
             <div class="payment-grid"><input class="payment-date" aria-label="Payment 3 due date" type="date"><input class="payment-amount" aria-label="Payment 3 amount" type="number" min="0" step="0.01"></div>
           </section>
-          </form>
+        </form>
 
-          <section id="placeholderLibrary" class="placeholder-library" aria-labelledby="placeholderLibraryTitle">
-            <h3 id="placeholderLibraryTitle">Placeholders</h3>
-            <input id="placeholderSearch" type="search" placeholder="Find a placeholder" aria-label="Find a placeholder">
-            <div id="placeholderList" class="placeholder-list"></div>
-          </section>
+        <section id="placeholderLibrary" class="placeholder-library" aria-labelledby="placeholderLibraryTitle" hidden>
+          <h3 id="placeholderLibraryTitle">Placeholders</h3>
+          <input id="placeholderSearch" type="search" placeholder="Find a placeholder" aria-label="Find a placeholder">
+          <div id="placeholderList" class="placeholder-list"></div>
         </section>
       </aside>
 

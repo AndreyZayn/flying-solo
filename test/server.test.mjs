@@ -26,8 +26,8 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /Brand representative name/);
   assert.match(pageHtml, /id="representative"[^>]+value="Mumtoz Mastura Kuzieva Fozilovna"/);
   assert.match(pageHtml, /id="representativeEmail"[^>]+type="email"[^>]+value="mumtozmastura@gmail\.com"/);
-  assert.match(pageHtml, /id="copyRepresentative"/);
-  assert.match(pageHtml, /id="copyRepresentativeEmail"/);
+  assert.doesNotMatch(pageHtml, /id="copyRepresentative"/);
+  assert.doesNotMatch(pageHtml, /id="copyRepresentativeEmail"/);
   assert.match(pageHtml, /href="\/vendor\/toastui-editor\.min\.css"/);
   assert.match(pageHtml, /src="\/vendor\/toastui-editor-all\.min\.js"/);
   assert.match(pageHtml, /src="\/vendor\/marked\.umd\.js"/);
