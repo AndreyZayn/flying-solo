@@ -4,6 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildContract } from "./src/contract-engine.mjs";
+import { createReviewStore } from "./src/review-store.mjs";
+import { createTemplateStore } from "./src/template-store.mjs";
+import { normalizeEditorMarkdown, resolveMarkdownTemplate } from "./public/markdown-template.mjs";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const registryPromise = fs.readFile(path.join(rootDir, "config/fashion-week-registry.json"), "utf8").then(JSON.parse);
@@ -11,7 +14,15 @@ const placeholderRegistryPromise = fs.readFile(
   path.join(rootDir, "config/fashion-week-placeholders.json"),
   "utf8",
 ).then(JSON.parse).then(validatePlaceholderRegistry);
-const templatePromise = fs.readFile(path.join(rootDir, "templates/fashion-week.md"), "utf8");
+const defaultReviewStore = createReviewStore({
+  examplePath: path.join(rootDir, "data/review-queue.example.json"),
+  queuePath: path.join(rootDir, "data/runtime/review-queue.json"),
+  archivePath: path.join(rootDir, "data/runtime/completed-contracts.json"),
+});
+const defaultTemplateStore = createTemplateStore({
+  rootDir,
+  registryPath: path.join(rootDir, "config/contract-templates.json"),
+});
 const staticFiles = new Map([
   ["/", [path.join(rootDir, "public/index.html"), "text/html; charset=utf-8"]],
   ["/index.html", [path.join(rootDir, "public/index.html"), "text/html; charset=utf-8"]],
@@ -66,7 +77,20 @@ async function readJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-async function handleRequest(request, response) {
+async function generatedContract(input) {
+  const [registry, placeholderRegistry] = await Promise.all([registryPromise, placeholderRegistryPromise]);
+  const result = buildContract(input, registry);
+  const definedKeys = new Set(placeholderRegistry.map((placeholder) => placeholder.key));
+  const generatedKeys = Object.keys(result.placeholders);
+  const mismatch = [
+    ...generatedKeys.filter((key) => !definedKeys.has(key)),
+    ...[...definedKeys].filter((key) => !(key in result.placeholders)),
+  ];
+  if (mismatch.length) throw new Error(`Placeholder registry mismatch: ${mismatch.join(", ")}.`);
+  return result;
+}
+
+async function handleRequest(request, response, { reviewStore, templateStore }) {
   const url = new URL(request.url, "http://localhost");
   if (request.method === "GET" && url.pathname === "/api/config") {
     return sendJson(response, 200, await registryPromise);
@@ -75,26 +99,67 @@ async function handleRequest(request, response) {
     return sendJson(response, 200, await placeholderRegistryPromise);
   }
   if (request.method === "GET" && url.pathname === "/api/template") {
-    const template = await templatePromise;
+    const template = (await templateStore.get("fashion-week")).markdown;
     response.writeHead(200, { "content-type": "text/markdown; charset=utf-8" });
     return response.end(template);
   }
+  if (request.method === "GET" && url.pathname === "/api/templates") {
+    return sendJson(response, 200, await templateStore.list());
+  }
+  const templateMatch = url.pathname.match(/^\/api\/templates\/([^/]+)$/);
+  if (templateMatch && request.method === "GET") {
+    try {
+      return sendJson(response, 200, await templateStore.get(decodeURIComponent(templateMatch[1])));
+    } catch (error) {
+      return sendJson(response, 404, { error: error.message });
+    }
+  }
+  if (templateMatch && request.method === "PUT") {
+    try {
+      const { markdown } = await readJson(request);
+      return sendJson(response, 200, await templateStore.save(decodeURIComponent(templateMatch[1]), markdown));
+    } catch (error) {
+      return sendJson(response, 400, { error: error.message });
+    }
+  }
+  if (request.method === "GET" && url.pathname === "/api/review-queue") {
+    return sendJson(response, 200, await reviewStore.getQueue());
+  }
+  if (request.method === "GET" && url.pathname === "/api/completed-contracts") {
+    return sendJson(response, 200, await reviewStore.getArchive());
+  }
+  const draftMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/draft$/);
+  if (draftMatch && request.method === "PUT") {
+    try {
+      return sendJson(response, 200, await reviewStore.saveDraft(
+        decodeURIComponent(draftMatch[1]),
+        await readJson(request),
+      ));
+    } catch (error) {
+      return sendJson(response, 400, { error: error.message });
+    }
+  }
+  const verifyMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/verify$/);
+  if (verifyMatch && request.method === "POST") {
+    try {
+      const { input, templateMarkdown, templateId = "fashion-week" } = await readJson(request);
+      const result = await generatedContract(input);
+      const normalizedTemplate = normalizeEditorMarkdown(templateMarkdown);
+      const resolvedMarkdown = resolveMarkdownTemplate(normalizedTemplate, result.placeholders);
+      return sendJson(response, 200, await reviewStore.verify(decodeURIComponent(verifyMatch[1]), {
+        input,
+        templateId,
+        title: result.title,
+        templateMarkdown: normalizedTemplate,
+        resolvedMarkdown,
+      }));
+    } catch (error) {
+      return sendJson(response, 400, { error: error.message });
+    }
+  }
   if (request.method === "POST" && url.pathname === "/api/generate") {
     try {
-      const [registry, placeholderRegistry, input] = await Promise.all([
-        registryPromise,
-        placeholderRegistryPromise,
-        readJson(request),
-      ]);
-      const result = buildContract(input, registry);
-      const definedKeys = new Set(placeholderRegistry.map((placeholder) => placeholder.key));
-      const generatedKeys = Object.keys(result.placeholders);
-      const missing = generatedKeys.filter((key) => !definedKeys.has(key));
-      const unused = [...definedKeys].filter((key) => !(key in result.placeholders));
-      if (missing.length || unused.length) {
-        throw new Error(`Placeholder registry mismatch: ${[...missing, ...unused].join(", ")}.`);
-      }
-      return sendJson(response, 200, result);
+      return sendJson(response, 200, await generatedContract(await readJson(request)));
     } catch (error) {
       return sendJson(response, 400, { error: error.message });
     }
@@ -108,9 +173,11 @@ async function handleRequest(request, response) {
   sendJson(response, 404, { error: "Not found." });
 }
 
-export function createAppServer() {
+export function createAppServer({ reviewStore = defaultReviewStore, templateStore = defaultTemplateStore } = {}) {
+  const ready = reviewStore.initialize();
   return http.createServer((request, response) => {
-    handleRequest(request, response).catch((error) => sendJson(response, 500, { error: error.message }));
+    ready.then(() => handleRequest(request, response, { reviewStore, templateStore }))
+      .catch((error) => sendJson(response, 500, { error: error.message }));
   });
 }
 

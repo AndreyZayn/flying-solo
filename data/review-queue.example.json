@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "batch": {
+    "id": "fashion-week-review-2026-08-10",
+    "label": "Fashion Week Contract Review",
+    "templateId": "fashion-week",
+    "source": {
+      "type": "normalized-example",
+      "note": "Replace through the normalized import boundary after XLS or agent parsing is implemented."
+    }
+  },
+  "records": [
+    {
+      "id": "mumtoz-mariam",
+      "status": "pending",
+      "input": {
+        "eventCode": "NYFW",
+        "eventMonth": "February 2027",
+        "brand": "Mumtoz Mariam",
+        "representative": "Mumtoz Mastura Kuzieva Fozilovna",
+        "recipientEmail": "mumtozmastura@gmail.com",
+        "category": "Clothing",
+        "grantEnabled": true,
+        "grantAmount": 2000,
+        "payments": [
+          { "dueDate": "2026-08-17", "amount": 1900 },
+          { "dueDate": "2026-10-12", "amount": 1500 },
+          { "dueDate": "2026-12-07", "amount": 1500 }
+        ]
+      },
+      "draftMarkdown": null,
+      "verifiedAt": null
+    }
+  ]
+}

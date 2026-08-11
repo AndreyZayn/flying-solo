@@ -20,7 +20,7 @@ test("serves the dashboard and registry", async (context) => {
   const page = await fetch(baseUrl);
   assert.equal(page.status, 200);
   const pageHtml = await page.text();
-  assert.match(pageHtml, /Fashion Week Contract Builder/);
+  assert.match(pageHtml, /Flying Solo Contract Review/);
   assert.match(pageHtml, /id="eventMonth"[^>]+type="month"/);
   assert.match(pageHtml, /id="grantPreset"/);
   assert.match(pageHtml, /Brand representative name/);
@@ -34,10 +34,15 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /src="\/vendor\/purify\.min\.js"/);
   assert.match(pageHtml, /id="wysiwygEditor"[^>]+aria-label="Contract editor"/);
   assert.match(pageHtml, /id="editorResizeHandle"[^>]+role="separator"[^>]+aria-label="Resize contract editor"/);
-  assert.match(pageHtml, /id="editorPanel"/);
-  assert.match(pageHtml, /id="previewPanel"[^>]+hidden/);
-  assert.match(pageHtml, /id="previewTab"[^>]+disabled[^>]*>Preview<\/button>/);
+  assert.match(pageHtml, /id="editorPanel"[^>]+hidden/);
+  assert.match(pageHtml, /id="previewPanel">/);
+  assert.match(pageHtml, /id="previewTab"[^>]+class="tab active"[^>]+disabled[^>]*>Preview<\/button>/);
+  assert.match(pageHtml, /id="editorTab"[^>]*>Edit contract<\/button>/);
   assert.match(pageHtml, /id="copyMarkdown"[^>]+disabled[^>]*>Copy Markdown<\/button>/);
+  assert.match(pageHtml, /id="reviewQueue"/);
+  assert.match(pageHtml, /id="reviewProgress"/);
+  assert.match(pageHtml, /id="verifyContract"[^>]*>Mark verified<\/button>/);
+  assert.match(pageHtml, /id="saveTemplate"[^>]*>Save template<\/button>/);
   assert.match(pageHtml, /aria-label="Payment 1 due date"/);
   assert.match(pageHtml, /aria-label="Payment 1 amount"/);
   assert.match(pageHtml, /aria-label="Payment 2 due date"/);
@@ -96,6 +101,14 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(template.headers.get("content-type"), /^text\/markdown/);
   assert.match(await template.text(), /^## EVENT AGREEMENT/m);
 
+  const templates = await fetch(`${baseUrl}/api/templates`).then((response) => response.json());
+  assert.equal(templates[0].id, "fashion-week");
+  const registeredTemplate = await fetch(`${baseUrl}/api/templates/fashion-week`).then((response) => response.json());
+  assert.match(registeredTemplate.markdown, /^## EVENT AGREEMENT/m);
+  const queue = await fetch(`${baseUrl}/api/review-queue`).then((response) => response.json());
+  assert.equal(queue.batch.templateId, "fashion-week");
+  assert.equal(queue.progress.total, queue.records.length);
+
   const editorBundle = await fetch(`${baseUrl}/vendor/toastui-editor-all.min.js`);
   assert.equal(editorBundle.status, 200);
   const editorBundleSource = await editorBundle.text();
@@ -111,6 +124,9 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(appSource, /from "\/editor-sizing\.mjs"/);
   assert.match(appSource, /from "\/placeholder-library\.mjs"/);
   assert.match(appSource, /fetch\("\/api\/placeholders"\)/);
+  assert.match(appSource, /fetch\("\/api\/review-queue"\)/);
+  assert.match(appSource, /\/api\/review-queue\/\$\{encodeURIComponent\(record\.id\)\}\/verify/);
+  assert.match(appSource, /\/api\/templates\/\$\{encodeURIComponent\(activeTemplateId\)\}/);
   assert.match(appSource, /contractEditor\.insertText\(placeholderInsertionText\(placeholder\)\)/);
   assert.match(appSource, /displayPlaceholderValue\(placeholder, currentResult\?\.placeholders/);
   assert.match(appSource, /matchesPlaceholder\(placeholder, placeholderSearch\.value\)/);
@@ -196,4 +212,68 @@ test("generates title and Markdown placeholders through the local API", async (c
   assert.equal(result.placeholders.REMAINING_BALANCE, "$4,900");
   assert.equal(result.placeholders.GRANT_ENABLED, true);
   assert.equal(result.placeholders.BRAND_NAME, "Example Brand");
+});
+
+test("persists review drafts and verifies the exact resolved contract through the API", async (context) => {
+  let verified;
+  let savedDraft;
+  const reviewStore = {
+    initialize: async () => {},
+    getQueue: async () => ({
+      schemaVersion: 1,
+      batch: { id: "batch", templateId: "fashion-week" },
+      records: [{ id: "brand-1", status: "pending", input: {} }],
+      progress: { total: 1, verified: 0, pending: 1, complete: false },
+    }),
+    getArchive: async () => ({ schemaVersion: 1, contracts: [] }),
+    saveDraft: async (id, draft) => { savedDraft = { id, ...draft }; return { id, status: "pending", ...draft }; },
+    verify: async (id, contract) => {
+      verified = { id, ...contract };
+      return { record: { id, status: "verified" }, progress: { total: 1, verified: 1, pending: 0, complete: true } };
+    },
+  };
+  const templateStore = {
+    list: async () => [{ id: "fashion-week", label: "Fashion Week", family: "fashion-week" }],
+    get: async () => ({ id: "fashion-week", markdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n" }),
+    save: async (_id, markdown) => ({ id: "fashion-week", markdown }),
+  };
+  const server = createAppServer({ reviewStore, templateStore });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  context.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const input = {
+    eventCode: "PFW",
+    eventMonth: "February 2027",
+    brand: "Example Brand",
+    representative: "Example Person",
+    category: "Clothing",
+    grantEnabled: true,
+    grantAmount: 2000,
+    payments: [
+      { dueDate: "2026-08-16", amount: 1700 },
+      { dueDate: "2026-10-15", amount: 1600 },
+      { dueDate: "2027-01-07", amount: 1600 },
+    ],
+  };
+
+  const draftResponse = await fetch(`${baseUrl}/api/review-queue/brand-1/draft`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ input, draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n" }),
+  });
+  assert.equal(draftResponse.status, 200);
+  assert.equal(savedDraft.id, "brand-1");
+
+  const verifyResponse = await fetch(`${baseUrl}/api/review-queue/brand-1/verify`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ input, templateId: "fashion-week", templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n" }),
+  });
+  assert.equal(verifyResponse.status, 200);
+  assert.equal(verified.id, "brand-1");
+  assert.equal(verified.templateMarkdown, "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n");
+  assert.equal(verified.resolvedMarkdown, "## EVENT AGREEMENT\n\nExample Brand\n");
 });

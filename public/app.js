@@ -33,13 +33,23 @@ const copyMarkdownButton = document.querySelector("#copyMarkdown");
 const toast = document.querySelector("#toast");
 const placeholderSearch = document.querySelector("#placeholderSearch");
 const placeholderList = document.querySelector("#placeholderList");
+const reviewQueueElement = document.querySelector("#reviewQueue");
+const reviewProgress = document.querySelector("#reviewProgress");
+const batchComplete = document.querySelector("#batchComplete");
+const verifyContractButton = document.querySelector("#verifyContract");
+const saveTemplateButton = document.querySelector("#saveTemplate");
 
 let registry;
 let placeholderRegistry = [];
 let currentResult;
 let contractEditor;
-let view = "editor";
+let view = "preview";
+let reviewQueue;
+let selectedRecordId;
+let activeTemplateId = "fashion-week";
+let templateMarkdown = "";
 let renderTimer;
+let draftSaveTimer;
 let editorHeightFrame;
 let editorManuallySized = false;
 let generateController;
@@ -67,6 +77,14 @@ function displayEventMonth(value) {
     .format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
+function monthInputValue(value) {
+  const match = String(value ?? "").match(/^([A-Za-z]+)\s+(\d{4})$/);
+  if (!match) return String(value ?? "");
+  const date = new Date(`${match[1]} 1, ${match[2]} 00:00:00 UTC`);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function todayIso() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -88,6 +106,40 @@ function readInput() {
     payments: dates.map((date, index) => ({ dueDate: date.value, amount: Number(amounts[index].value) }))
       .filter((payment) => payment.dueDate || payment.amount),
   };
+}
+
+function writeInput(input) {
+  eventSelect.value = input.eventCode ?? "";
+  eventMonth.value = monthInputValue(input.eventMonth);
+  document.querySelector("#brand").value = input.brand ?? "";
+  representative.value = input.representative ?? "";
+  representativeEmail.value = input.recipientEmail ?? "";
+  categorySelect.value = input.category ?? "";
+  grantEnabled.checked = Boolean(input.grantEnabled);
+  const grantAmount = Number(input.grantAmount || 0);
+  if (grantAmount === Number(registry.grant.defaultAmount)) {
+    grantPreset.value = String(registry.grant.defaultAmount);
+  } else {
+    grantPreset.value = "custom";
+    customGrantAmount.value = String(grantAmount);
+  }
+  const payments = input.payments ?? [];
+  document.querySelectorAll(".payment-date").forEach((field, index) => {
+    field.value = payments[index]?.dueDate ?? "";
+  });
+  document.querySelectorAll(".payment-amount").forEach((field, index) => {
+    field.value = payments[index]?.amount ?? "";
+  });
+  updatePriceSummary();
+}
+
+function selectedRecord() {
+  return reviewQueue?.records.find((record) => record.id === selectedRecordId);
+}
+
+function setReviewLocked(locked) {
+  form.querySelectorAll("input, select").forEach((control) => { control.disabled = locked; });
+  verifyContractButton.disabled = locked || !currentResult;
 }
 
 function updatePriceSummary() {
@@ -190,6 +242,7 @@ function enableEditorSizing() {
     }
   });
   contractEditor.on("change", fitEditorToDocument);
+  contractEditor.on("change", scheduleDraftSave);
   window.addEventListener("resize", fitEditorToDocument);
   editorResizeHandle.addEventListener("pointerdown", beginEditorResize);
   fitEditorToDocument();
@@ -247,6 +300,8 @@ function showResult() {
   previewTab.classList.toggle("active", !editorVisible);
   editorTab.setAttribute("aria-pressed", String(editorVisible));
   previewTab.setAttribute("aria-pressed", String(!editorVisible));
+  saveTemplateButton.hidden = !editorVisible;
+  verifyContractButton.disabled = !currentResult || selectedRecord()?.status === "verified";
   if (editorVisible) {
     fitEditorToDocument();
     return;
@@ -255,6 +310,114 @@ function showResult() {
     renderPreview();
   } catch (error) {
     showError(error);
+  }
+}
+
+function renderReviewQueue() {
+  if (!reviewQueue) return;
+  reviewQueueElement.replaceChildren();
+  const { total, verified, pending, complete } = reviewQueue.progress;
+  reviewProgress.textContent = `${verified} of ${total} verified · ${pending} remaining`;
+  batchComplete.hidden = !complete;
+  for (const record of reviewQueue.records) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `review-record ${record.status}`;
+    button.classList.toggle("selected", record.id === selectedRecordId);
+    button.innerHTML = `<span class="review-record-top"><strong></strong><span class="review-state"></span></span><small></small>`;
+    button.querySelector("strong").textContent = record.input.brand;
+    button.querySelector(".review-state").textContent = record.status === "verified" ? "Verified" : "Pending";
+    button.querySelector("small").textContent = `${record.input.eventCode} · ${record.input.eventMonth}`;
+    button.addEventListener("click", () => selectRecord(record.id));
+    reviewQueueElement.append(button);
+  }
+}
+
+async function refreshReviewQueue() {
+  const response = await fetch("/api/review-queue");
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "Unable to load review queue.");
+  reviewQueue = body;
+  renderReviewQueue();
+}
+
+async function saveCurrentDraft({ quiet = true } = {}) {
+  const record = selectedRecord();
+  if (!record || record.status === "verified" || !contractEditor) return;
+  const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/draft`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      input: readInput(),
+      draftMarkdown: normalizeEditorMarkdown(contractEditor.getMarkdown()),
+    }),
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "Unable to save draft.");
+  Object.assign(record, body);
+  if (!quiet) showToast("Draft saved");
+}
+
+function scheduleDraftSave() {
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => saveCurrentDraft().catch(showError), 700);
+}
+
+async function selectRecord(recordId, { savePrevious = true } = {}) {
+  if (recordId === selectedRecordId && selectedRecordId) return;
+  clearTimeout(draftSaveTimer);
+  if (savePrevious) await saveCurrentDraft();
+  selectedRecordId = recordId;
+  const record = selectedRecord();
+  if (!record) throw new Error(`Unknown review record: ${recordId}.`);
+  activeTemplateId = reviewQueue.batch.templateId;
+  writeInput(record.input);
+  contractEditor.setMarkdown(record.draftMarkdown || templateMarkdown, false);
+  editorManuallySized = false;
+  view = "preview";
+  setReviewLocked(record.status === "verified");
+  renderReviewQueue();
+  await generate();
+}
+
+async function saveTemplate() {
+  const markdown = normalizeEditorMarkdown(contractEditor.getMarkdown());
+  const response = await fetch(`/api/templates/${encodeURIComponent(activeTemplateId)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ markdown }),
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "Unable to save template.");
+  templateMarkdown = body.markdown;
+  showToast("Template saved for future contracts");
+}
+
+async function verifyCurrentContract() {
+  const record = selectedRecord();
+  if (!record || record.status === "verified") return;
+  await generate();
+  if (!currentResult) throw new Error("Resolve contract errors before verification.");
+  const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/verify`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      input: readInput(),
+      templateId: activeTemplateId,
+      templateMarkdown: normalizeEditorMarkdown(contractEditor.getMarkdown()),
+    }),
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "Unable to verify contract.");
+  await refreshReviewQueue();
+  showToast("Contract verified and stored");
+  const next = reviewQueue.records.find((candidate) => candidate.status === "pending");
+  if (next) {
+    selectedRecordId = undefined;
+    await selectRecord(next.id, { savePrevious: false });
+  } else {
+    setReviewLocked(true);
+    renderReviewQueue();
   }
 }
 
@@ -279,6 +442,7 @@ async function generate() {
     currentResult = body;
     previewTab.disabled = false;
     copyMarkdownButton.disabled = false;
+    verifyContractButton.disabled = selectedRecord()?.status === "verified";
     errorElement.hidden = true;
     statusBadge.textContent = "Valid";
     statusBadge.className = "status-badge valid";
@@ -289,6 +453,7 @@ async function generate() {
     currentResult = null;
     previewTab.disabled = true;
     copyMarkdownButton.disabled = true;
+    verifyContractButton.disabled = true;
     renderPlaceholderLibrary();
     showError(error);
   } finally {
@@ -310,6 +475,7 @@ function scheduleGenerate() {
   errorElement.hidden = true;
   if (view === "preview") documentElement.replaceChildren();
   renderTimer = setTimeout(generate, 120);
+  scheduleDraftSave();
 }
 
 function showToast(message) {
@@ -426,6 +592,10 @@ function renderPlaceholderLibrary() {
 }
 
 async function initialize() {
+  const queueResponse = await fetch("/api/review-queue");
+  if (!queueResponse.ok) throw new Error("Unable to load the contract review queue.");
+  const loadedQueue = await queueResponse.json();
+  const queueTemplateId = loadedQueue.batch.templateId;
   const [loadedRegistry, loadedPlaceholders, template] = await Promise.all([
     fetch("/api/config").then((response) => {
       if (!response.ok) throw new Error("Unable to load contract configuration.");
@@ -435,16 +605,19 @@ async function initialize() {
       if (!response.ok) throw new Error("Unable to load placeholders.");
       return response.json();
     }),
-    fetch("/api/template").then((response) => {
+    fetch(`/api/templates/${encodeURIComponent(queueTemplateId)}`).then((response) => {
       if (!response.ok) throw new Error("Unable to load the contract template.");
-      return response.text();
+      return response.json();
     }),
   ]);
   registry = loadedRegistry;
   placeholderRegistry = loadedPlaceholders;
+  reviewQueue = loadedQueue;
+  activeTemplateId = reviewQueue.batch.templateId;
+  templateMarkdown = template.markdown;
   contractEditor = new toastui.Editor({
     el: document.querySelector("#wysiwygEditor"),
-    initialValue: template.trim(),
+    initialValue: templateMarkdown.trim(),
     initialEditType: "wysiwyg",
     hideModeSwitch: true,
     usageStatistics: false,
@@ -488,11 +661,13 @@ async function initialize() {
       showError(error);
     }
   });
+  saveTemplateButton.addEventListener("click", () => saveTemplate().catch(showError));
+  verifyContractButton.addEventListener("click", () => verifyCurrentContract().catch(showError));
   placeholderSearch.addEventListener("input", renderPlaceholderLibrary);
   renderPlaceholderLibrary();
-  recalculateAmounts();
-  recalculateDates();
-  await generate();
+  renderReviewQueue();
+  const firstRecord = reviewQueue.records.find((record) => record.status === "pending") ?? reviewQueue.records[0];
+  await selectRecord(firstRecord.id, { savePrevious: false });
 }
 
 initialize().catch(showError);
