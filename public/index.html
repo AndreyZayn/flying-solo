@@ -25,11 +25,12 @@
           <div id="reviewQueue" class="review-queue" aria-label="Contracts to review"></div>
         </section>
 
-        <div class="status-row">
-          <span id="statusBadge" class="status-badge">Ready</span>
-        </div>
+        <section id="editControls" class="edit-controls" hidden>
+          <div class="status-row">
+            <span id="statusBadge" class="status-badge">Ready</span>
+          </div>
 
-        <form id="contractForm">
+          <form id="contractForm">
           <div class="field-row two-up">
             <label><span class="field-label">Fashion week <span class="source-indicator" data-source-field="eventCode" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><select id="eventCode" name="eventCode"></select></label>
             <label><span class="field-label">Event month <span class="source-indicator" data-source-field="eventMonth" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="eventMonth" name="eventMonth" type="month" value="2027-02"></label>
@@ -73,12 +74,13 @@
             <div class="payment-grid"><input class="payment-date" aria-label="Payment 2 due date" type="date"><input class="payment-amount" aria-label="Payment 2 amount" type="number" min="0" step="0.01"></div>
             <div class="payment-grid"><input class="payment-date" aria-label="Payment 3 due date" type="date"><input class="payment-amount" aria-label="Payment 3 amount" type="number" min="0" step="0.01"></div>
           </section>
-        </form>
+          </form>
 
-        <section id="placeholderLibrary" class="placeholder-library" aria-labelledby="placeholderLibraryTitle">
-          <h3 id="placeholderLibraryTitle">Placeholders</h3>
-          <input id="placeholderSearch" type="search" placeholder="Find a placeholder" aria-label="Find a placeholder">
-          <div id="placeholderList" class="placeholder-list"></div>
+          <section id="placeholderLibrary" class="placeholder-library" aria-labelledby="placeholderLibraryTitle">
+            <h3 id="placeholderLibraryTitle">Placeholders</h3>
+            <input id="placeholderSearch" type="search" placeholder="Find a placeholder" aria-label="Find a placeholder">
+            <div id="placeholderList" class="placeholder-list"></div>
+          </section>
         </section>
       </aside>
 

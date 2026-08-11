@@ -33,6 +33,7 @@ npm test
 - Clicking **Mark verified** validates and stores the exact template Markdown, resolved Markdown, normalized input, title, time, and reviewer in `data/runtime/completed-contracts.json`.
 - `data/runtime/` is intentionally excluded from Git because it contains operational brand data. Future local agents should read `completed-contracts.json` as the completed-contract handoff.
 - A batch is complete only when every record in its review queue is verified.
+- Preview mode is review-only: it shows the brand queue and resolved contract, while all sourced fields, placeholder controls, and the visual editor appear only after **Edit contract** is selected.
 
 ## Placeholder syntax
 

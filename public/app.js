@@ -33,6 +33,7 @@ const copyMarkdownButton = document.querySelector("#copyMarkdown");
 const toast = document.querySelector("#toast");
 const placeholderSearch = document.querySelector("#placeholderSearch");
 const placeholderList = document.querySelector("#placeholderList");
+const editControls = document.querySelector("#editControls");
 const reviewQueueElement = document.querySelector("#reviewQueue");
 const reviewProgress = document.querySelector("#reviewProgress");
 const batchComplete = document.querySelector("#batchComplete");
@@ -294,6 +295,7 @@ function renderPreview() {
 function showResult() {
   if (currentResult) titleElement.textContent = currentResult.title;
   const editorVisible = view === "editor";
+  editControls.hidden = !editorVisible;
   editorPanel.hidden = !editorVisible;
   previewPanel.hidden = editorVisible;
   editorTab.classList.toggle("active", editorVisible);
