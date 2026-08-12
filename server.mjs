@@ -7,7 +7,7 @@ import { buildFamilyContract, familyConfig } from "./src/contract-families.mjs";
 import { createReviewStore } from "./src/review-store.mjs";
 import { createTemplateStore } from "./src/template-store.mjs";
 import { importFashionWeekWorkbook } from "./src/workbook-importer.mjs";
-import { normalizeEditorMarkdown, resolveMarkdownTemplate } from "./public/markdown-template.mjs";
+import { normalizeEditorMarkdown, resolveMarkdownTemplate, resolveTextTemplate } from "./public/markdown-template.mjs";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const placeholderRegistryPromise = fs.readFile(
@@ -33,6 +33,7 @@ const staticFiles = new Map([
   ["/placeholder-library.mjs", [path.join(rootDir, "public/placeholder-library.mjs"), "text/javascript; charset=utf-8"]],
   ["/family-fields.mjs", [path.join(rootDir, "public/family-fields.mjs"), "text/javascript; charset=utf-8"]],
   ["/review-selector.mjs", [path.join(rootDir, "public/review-selector.mjs"), "text/javascript; charset=utf-8"]],
+  ["/template-preview.mjs", [path.join(rootDir, "public/template-preview.mjs"), "text/javascript; charset=utf-8"]],
   ["/schedule.mjs", [path.join(rootDir, "src/schedule.mjs"), "text/javascript; charset=utf-8"]],
   ["/vendor/toastui-editor.min.css", [path.join(rootDir, "node_modules/@toast-ui/editor/dist/toastui-editor.css"), "text/css; charset=utf-8"]],
   ["/vendor/toastui-editor-all.min.js", [path.join(rootDir, "public/vendor/toastui-editor-all.min.js"), "text/javascript; charset=utf-8"]],
@@ -84,7 +85,7 @@ async function readJson(request) {
 }
 
 function resolveTitleTemplate(titleTemplate, placeholders) {
-  const resolved = resolveMarkdownTemplate(String(titleTemplate ?? "").trim(), placeholders).trim();
+  const resolved = resolveTextTemplate(String(titleTemplate ?? "").trim(), placeholders).trim();
   if (!resolved) throw new Error("Contract title cannot be empty.");
   if (/\r|\n/.test(resolved)) throw new Error("Contract title must stay on one line.");
   return resolved;

@@ -3,6 +3,7 @@ import { calculateEditorHeight, isResizeHandlePointer } from "/editor-sizing.mjs
 import { selectFashionWeekCategory } from "/family-fields.mjs";
 import { normalizeEditorMarkdown, resolveMarkdownTemplate } from "/markdown-template.mjs";
 import { nextIncompleteRecord, reviewRecordPresentation } from "/review-selector.mjs";
+import { templatePreviewInput } from "/template-preview.mjs";
 import {
   displayPlaceholderValue,
   matchesPlaceholder,
@@ -33,6 +34,7 @@ const statusBadge = document.querySelector("#statusBadge");
 const editorTab = document.querySelector("#editorTab");
 const previewTab = document.querySelector("#previewTab");
 const copyMarkdownButton = document.querySelector("#copyMarkdown");
+const copyTitleButton = document.querySelector("#copyTitle");
 const toast = document.querySelector("#toast");
 const templateWorkspaceButton = document.querySelector("#templateWorkspace");
 const batchWorkspaceButton = document.querySelector("#batchWorkspace");
@@ -83,6 +85,8 @@ let editorHeightFrame;
 let editorManuallySized = false;
 let generateController;
 let generateRevision = 0;
+let templatePreviewRevision = 0;
+let templatePreviewResult;
 let loadingRecord = false;
 
 function money(value) {
@@ -486,21 +490,54 @@ function renderPreview() {
   return markdown;
 }
 
-function renderTemplatePreview() {
+async function renderTemplatePreview() {
+  const revision = ++templatePreviewRevision;
+  const normalizedTemplate = normalizeEditorMarkdown(contractEditor.getMarkdown());
+  const sampleInput = templatePreviewInput({ family: activeFamily(), registry });
+  templatePreviewResult = undefined;
+  copyTitleButton.disabled = true;
   documentElement.replaceChildren();
-  documentElement.innerHTML = renderedContractHtml(normalizeEditorMarkdown(contractEditor.getMarkdown()));
-  renderTemplateTitle();
-  errorElement.hidden = true;
-  statusBadge.textContent = "Template ready";
-  statusBadge.className = "status-badge valid";
+  titleElement.textContent = "Rendering sample contract…";
+  titleCaption.textContent = "Sample contract title";
+  statusBadge.textContent = "Rendering sample";
+  statusBadge.className = "status-badge checking";
+  try {
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        templateId: activeTemplateId,
+        input: sampleInput,
+        titleTemplate: activeTitleTemplate(),
+      }),
+    });
+    const result = await response.json();
+    if (revision !== templatePreviewRevision || workspaceMode !== "templates" || view !== "preview") return;
+    if (!response.ok) throw new Error(result.error || "Unable to render the sample contract.");
+    templatePreviewResult = result;
+    documentElement.innerHTML = renderedContractHtml(resolveMarkdownTemplate(normalizedTemplate, result.placeholders));
+    titleElement.textContent = result.title;
+    copyTitleButton.disabled = false;
+    errorElement.hidden = true;
+    statusBadge.textContent = "Sample preview";
+    statusBadge.className = "status-badge valid";
+  } catch (error) {
+    if (revision !== templatePreviewRevision || workspaceMode !== "templates" || view !== "preview") return;
+    copyTitleButton.disabled = true;
+    showError(error);
+  }
 }
 
 function showResult() {
-  if (workspaceMode === "templates") renderTemplateTitle();
-  if (currentResult && workspaceMode === "batch") titleElement.textContent = currentResult.title;
   const editorVisible = view === "editor";
+  if (workspaceMode === "templates" && editorVisible) renderTemplateTitle();
+  if (currentResult && workspaceMode === "batch") titleElement.textContent = currentResult.title;
   const templateEditor = workspaceMode === "templates" && editorVisible;
+  const templatePreview = workspaceMode === "templates" && !editorVisible;
   contractOutputBar.hidden = templateEditor;
+  titleCaption.textContent = templatePreview ? "Sample contract title" : (workspaceMode === "templates" ? "Contract title template" : "Contract title");
+  copyTitleButton.textContent = templatePreview ? "Copy sample title" : (workspaceMode === "templates" ? "Copy title template" : "Copy title");
+  copyTitleButton.disabled = templatePreview && !templatePreviewResult;
   placeholderLibrary.hidden = !editorVisible;
   editorPanel.hidden = !editorVisible;
   previewPanel.hidden = editorVisible;
@@ -512,15 +549,17 @@ function showResult() {
   updateVerificationAction();
   syncFieldEditability();
   if (editorVisible) {
+    templatePreviewRevision += 1;
+    templatePreviewResult = undefined;
     fitEditorToDocument();
     refreshPlaceholderFormatting();
     return;
   }
-  try {
-    workspaceMode === "templates" ? renderTemplatePreview() : renderPreview();
-  } catch (error) {
-    showError(error);
+  if (workspaceMode === "templates") {
+    renderTemplatePreview();
+    return;
   }
+  try { renderPreview(); } catch (error) { showError(error); }
 }
 
 function renderReviewQueue() {
@@ -983,9 +1022,9 @@ async function initialize() {
   });
   editorTab.addEventListener("click", () => { view = "editor"; showResult(); });
   previewTab.addEventListener("click", () => { view = "preview"; showResult(); });
-  document.querySelector("#copyTitle").addEventListener("click", () => copyText(
-    workspaceMode === "templates" ? activeTitleTemplate() : currentResult?.title,
-    workspaceMode === "templates" ? "Title template copied" : "Title copied",
+  copyTitleButton.addEventListener("click", () => copyText(
+    workspaceMode === "templates" && view === "preview" ? templatePreviewResult?.title : (workspaceMode === "templates" ? activeTitleTemplate() : currentResult?.title),
+    workspaceMode === "templates" && view === "preview" ? "Sample title copied" : (workspaceMode === "templates" ? "Title template copied" : "Title copied"),
   ));
   copyMarkdownButton.addEventListener("click", async () => {
     try {

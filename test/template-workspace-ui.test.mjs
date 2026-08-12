@@ -10,10 +10,14 @@ test("template workspace offers a preview and card-level deletion", () => {
   assert.doesNotMatch(html, /id="deleteTemplate"/);
   assert.match(app, /previewTab\.hidden = false/);
   assert.match(app, /const editorVisible = view === "editor"/);
-  assert.match(app, /workspaceMode === "templates" \? renderTemplatePreview\(\) : renderPreview\(\)/);
+  assert.match(app, /if \(workspaceMode === "templates"\) \{\s*renderTemplatePreview\(\);\s*return;\s*\}/s);
+  assert.match(app, /try \{ renderPreview\(\); \} catch \(error\) \{ showError\(error\); \}/);
   assert.match(app, /if \(workspaceMode === "templates" && view === "preview"\) showResult\(\);/);
   assert.match(app, /remove\.className = "template-card-delete"/);
   assert.match(app, /method: "DELETE"/);
+  assert.match(app, /templatePreviewInput\(\{ family: activeFamily\(\), registry \}\)/);
+  assert.match(app, /resolveMarkdownTemplate\(normalizedTemplate, result\.placeholders\)/);
+  assert.match(app, /statusBadge\.textContent = "Sample preview"/);
 });
 
 test("hides the redundant title output only while editing a template", () => {
