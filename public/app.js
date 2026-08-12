@@ -26,6 +26,7 @@ const documentElement = document.querySelector("#contractDocument");
 const editorPanel = document.querySelector("#editorPanel");
 const editorResizeHandle = document.querySelector("#editorResizeHandle");
 const previewPanel = document.querySelector("#previewPanel");
+const contractOutputBar = document.querySelector("#contractOutputBar");
 const titleElement = document.querySelector("#contractTitle");
 const errorElement = document.querySelector("#errorMessage");
 const statusBadge = document.querySelector("#statusBadge");
@@ -498,6 +499,8 @@ function showResult() {
   if (workspaceMode === "templates") renderTemplateTitle();
   if (currentResult && workspaceMode === "batch") titleElement.textContent = currentResult.title;
   const editorVisible = view === "editor";
+  const templateEditor = workspaceMode === "templates" && editorVisible;
+  contractOutputBar.hidden = templateEditor;
   placeholderLibrary.hidden = !editorVisible;
   editorPanel.hidden = !editorVisible;
   previewPanel.hidden = editorVisible;

@@ -16,6 +16,12 @@ test("template workspace offers a preview and card-level deletion", () => {
   assert.match(app, /method: "DELETE"/);
 });
 
+test("hides the redundant title output only while editing a template", () => {
+  assert.match(html, /id="contractOutputBar"/);
+  assert.match(app, /const templateEditor = workspaceMode === "templates" && editorVisible/);
+  assert.match(app, /contractOutputBar\.hidden = templateEditor/);
+});
+
 test("renders template-title placeholders as visible, labeled chips", () => {
   assert.match(app, /function renderTemplateTitle\(\)/);
   assert.match(app, /titleElement\.replaceChildren\(fragment\)/);
