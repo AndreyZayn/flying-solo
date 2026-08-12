@@ -16,6 +16,15 @@ test("template workspace offers a preview and card-level deletion", () => {
   assert.match(app, /method: "DELETE"/);
 });
 
+test("renders template-title placeholders as visible, labeled chips", () => {
+  assert.match(app, /function renderTemplateTitle\(\)/);
+  assert.match(app, /titleElement\.replaceChildren\(fragment\)/);
+  assert.match(app, /element\.classList\.add\("title-template-token"\)/);
+  assert.match(app, /element\.dataset\.format = "Title"/);
+  assert.match(app, /widget\.classList\.contains\("title-template-token"\) \|\| widget\.closest\("#titleWysiwygEditor"\)/);
+  assert.doesNotMatch(app, /titleElement\.textContent = activeTitleTemplate\(\)/);
+});
+
 test("shows a template library without version history", () => {
   assert.match(app, /remove\.className = "template-card-delete"/);
   assert.match(html, /id="templateCards"/);

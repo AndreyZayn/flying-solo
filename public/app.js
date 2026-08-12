@@ -488,14 +488,14 @@ function renderPreview() {
 function renderTemplatePreview() {
   documentElement.replaceChildren();
   documentElement.innerHTML = renderedContractHtml(normalizeEditorMarkdown(contractEditor.getMarkdown()));
-  titleElement.textContent = activeTitleTemplate();
+  renderTemplateTitle();
   errorElement.hidden = true;
   statusBadge.textContent = "Template ready";
   statusBadge.className = "status-badge valid";
 }
 
 function showResult() {
-  if (workspaceMode === "templates") titleElement.textContent = activeTitleTemplate();
+  if (workspaceMode === "templates") renderTemplateTitle();
   if (currentResult && workspaceMode === "batch") titleElement.textContent = currentResult.title;
   const editorVisible = view === "editor";
   placeholderLibrary.hidden = !editorVisible;
@@ -804,6 +804,27 @@ function placeholderWidget(token) {
   return element;
 }
 
+function renderTemplateTitle() {
+  const title = activeTitleTemplate();
+  const fragment = document.createDocumentFragment();
+  const tokenPattern = /\{\{(?:#IF\s+[A-Z0-9_]+|\/IF|[A-Z0-9_]+)\}\}/g;
+  let cursor = 0;
+
+  for (const match of title.matchAll(tokenPattern)) {
+    fragment.append(document.createTextNode(title.slice(cursor, match.index)));
+    const element = placeholderWidget(match[0]);
+    element.classList.add("title-template-token");
+    element.dataset.format = "Title";
+    element.querySelector(".contract-placeholder-format").textContent = "Title";
+    element.setAttribute("aria-label", `${placeholderLabel(match[0])} · Title`);
+    fragment.append(element);
+    cursor = match.index + match[0].length;
+  }
+
+  fragment.append(document.createTextNode(title.slice(cursor)));
+  titleElement.replaceChildren(fragment);
+}
+
 function placeholderFormatting(element) {
   const formats = [];
   if (element.closest("h1, h2, h3, h4, h5, h6")) formats.push("Heading");
@@ -817,7 +838,9 @@ function refreshPlaceholderFormatting() {
   requestAnimationFrame(() => {
     document.querySelectorAll(".contract-placeholder-widget").forEach((widget) => {
       const format = widget.querySelector(".contract-placeholder-format");
-      const context = widget.closest("#titleWysiwygEditor") ? "Title" : placeholderFormatting(widget);
+      const context = widget.classList.contains("title-template-token") || widget.closest("#titleWysiwygEditor")
+        ? "Title"
+        : placeholderFormatting(widget);
       widget.dataset.format = context;
       widget.setAttribute("aria-label", `${widget.querySelector(".contract-placeholder-label")?.textContent ?? "Placeholder"} · ${context}`);
       if (format) format.textContent = context;

@@ -116,7 +116,8 @@ input:focus, select:focus { border-color: #9a7c30; box-shadow: 0 0 0 3px rgba(23
 .output-bar { padding: 12px 14px; background: #fff; border: 1px solid var(--line); border-radius: 9px; }
 .title-output { min-width: 0; display: grid; gap: 4px; }
 .field-caption { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
-.title-output strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.title-output strong { display: block; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+.title-template-token { margin: 0 2px; }
 .secondary-button, .primary-button { cursor: pointer; border-radius: 7px; font-weight: 800; }
 .secondary-button { padding: 8px 11px; border: 1px solid #c9c4b9; background: #fff; font-size: 11px; }
 .primary-button { padding: 11px 16px; border: 0; background: var(--ink); color: #fff; }
