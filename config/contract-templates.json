@@ -1,0 +1,19 @@
+[
+  {
+    "id": "fashion-week",
+    "label": "Fashion Week Participation Agreement",
+    "family": "fashion-week",
+    "templateFile": "templates/fashion-week.md",
+    "placeholderRegistryFile": "config/fashion-week-placeholders.json",
+    "requiredPlaceholders": [
+      "EVENT_CODE",
+      "EVENT_MONTH",
+      "REPRESENTATIVE_NAME",
+      "BRAND_NAME",
+      "FULL_PRICE",
+      "REMAINING_BALANCE",
+      "PAYMENT_1_DUE_DATE",
+      "PAYMENT_1_AMOUNT"
+    ]
+  }
+]
