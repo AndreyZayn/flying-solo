@@ -5,35 +5,36 @@ import test from "node:test";
 const html = await fs.readFile(new URL("../public/index.html", import.meta.url), "utf8");
 const app = await fs.readFile(new URL("../public/app.js", import.meta.url), "utf8");
 
-test("template workspace offers a preview and a deletion control", () => {
+test("template workspace offers a preview and card-level deletion", () => {
   assert.match(html, /id="previewTab"[^>]*>Preview<\/button>/);
-  assert.match(html, /id="deleteTemplate"[^>]*>Delete template<\/button>/);
+  assert.doesNotMatch(html, /id="deleteTemplate"/);
   assert.match(app, /previewTab\.hidden = false/);
   assert.match(app, /const editorVisible = view === "editor"/);
   assert.match(app, /workspaceMode === "templates" \? renderTemplatePreview\(\) : renderPreview\(\)/);
   assert.match(app, /if \(workspaceMode === "templates" && view === "preview"\) showResult\(\);/);
-  assert.match(app, /deleteTemplateButton\.hidden = !template/);
+  assert.match(app, /remove\.className = "template-card-delete"/);
   assert.match(app, /method: "DELETE"/);
 });
 
-test("shows template and version deletion controls for removable saved content", () => {
-  assert.match(app, /deleteTemplateButton\.hidden = !template/);
-  assert.match(app, /snapshot\.deletable/);
-  assert.match(app, /Delete version/);
-  assert.match(app, /async function deleteTemplateVersion/);
-  assert.match(app, /\/history\/\$\{encodeURIComponent\(snapshot\.snapshotId\)\}/);
+test("shows a template library without version history", () => {
+  assert.match(app, /remove\.className = "template-card-delete"/);
+  assert.match(html, /id="templateCards"/);
+  assert.match(html, /id="showTemplateCreate"[^>]*>New template/);
+  assert.match(html, /id="templateSourceSelect"/);
+  assert.match(app, /template-card-delete/);
+  assert.doesNotMatch(html, /templateHistory|Version history|Delete version|Restore/);
+  assert.doesNotMatch(app, /renderTemplateHistory|deleteTemplateVersion|restoreTemplate/);
 });
 
-test("uses one saved contract template selector instead of separate contract-type controls", () => {
-  assert.match(html, /id="templateSelect"[^>]+aria-label="Contract template"/);
+test("uses one library and one batch template selector instead of contract types", () => {
+  assert.doesNotMatch(html, /id="templateSelect"/);
   assert.match(html, /id="batchTemplateSelect"[^>]+aria-label="Contract template"/);
-  assert.doesNotMatch(html, /id="templateSourceSelect"/);
+  assert.match(html, /id="templateSourceSelect"/);
   assert.doesNotMatch(html, /id="contractType"/);
   assert.doesNotMatch(html, />Contract type</);
-  assert.match(app, /templateSelect\.innerHTML = templateCatalog\.map/);
+  assert.match(app, /templateCards\.replaceChildren/);
   assert.match(app, /batchTemplateSelect\.innerHTML = templateCatalog\.map/);
-  assert.match(app, /sourceTemplateId: activeTemplateId/);
-  assert.doesNotMatch(app, /templateSourceSelect/);
+  assert.match(app, /sourceTemplateId: templateSourceSelect\.value/);
   assert.doesNotMatch(app, /contractTypeSelect/);
   assert.match(app, /templateManager\.hidden = !templates/);
 });

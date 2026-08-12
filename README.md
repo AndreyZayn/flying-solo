@@ -18,23 +18,25 @@ Every non-empty row becomes one review record. Workbook values are preserved; th
 
 The supplied `8.9.26_FW.xlsx` sample imports 29 records. Nine source rows (19–27) require review because payment 2 and payment 3 use the same due date.
 
-## Multiple contract types
+## Supported template families
 
 `config/contract-templates.json` registers each family, its protected Markdown template, required heading, required placeholders, and placeholder registry. The shared UI and verified-Markdown handoff stay the same; each family has an independent engine and catalog.
 
 - **Fashion Week** uses the uploaded workbook, category prices, grant difference, and up to three source payment pairs.
 - **Membership** uses the approved package/duration catalog, derives the inclusive term end and cancellation deadline, and renders the protected Membership agreement. Selecting a Membership template in **Start a batch** loads local mock data, so the workflow can be tested without a real brand.
 
-## Templates before a batch
+## Template library
 
-The app opens in **Templates**. Anna chooses an approved contract type, then opens a saved template or creates a named custom template from that type. Custom templates deliberately retain the selected family’s placeholder registry, contract engine, commercial validation, and batch adapter; a generic unvalidated agreement family is not created accidentally.
+The app opens in **Templates**, which shows every available contract template. Choose **New template**, name it, and select an existing template to start from. **Copy** does the same thing with that template already selected. To create a revision, make a copy and include the name you want, such as `Fashion Week v1`.
+
+Each named template keeps its approved family’s placeholder registry, contract engine, commercial validation, and batch adapter. A generic unvalidated agreement family is not created accidentally.
 
 Each template has two editable parts:
 
 - a one-line **contract title template** with values and conditional title text;
 - the rich-text **contract body**.
 
-Saving creates the next numbered version and preserves the prior title/body pair. Existing legacy Markdown snapshots are shown as earlier versions too. Version history permits restoration; a restore is saved as a new current version rather than overwriting history.
+Saving updates the selected template in place. There is no automatic version number, history, restore action, or snapshot file.
 
 The same title/body editors are available from batch review. Per-record title and body edits remain drafts until verification; the verified handoff preserves both the resolved title and the reviewed title template.
 
@@ -54,12 +56,12 @@ npm test
 
 ## Source of truth
 
-- `config/contract-templates.json` registers every built-in contract type, its default title template, protected body Markdown, and required placeholders.
-- `data/runtime/template-library.json` stores local custom-template metadata and version/title overrides; custom template bodies and current runtime state remain local and Git-ignored.
+- `config/contract-templates.json` registers every built-in template family, its default title template, protected body Markdown, and required placeholders.
+- `data/runtime/template-library.json` stores local custom-template metadata and title overrides; custom template bodies and current runtime state remain local and Git-ignored.
 - `templates/fashion-week.md` contains protected contract wording and placeholder positions.
 - `config/fashion-week-registry.json` contains supported events, category prices, aliases, and the approved grant label/default.
 - `config/fashion-week-placeholders.json` contains every placeholder shown in the sidebar, including its label, description, type, and visual group. Add or revise display metadata there; the server rejects duplicate, malformed, or out-of-sync keys.
-- Saving a template creates a numbered title/body snapshot before replacing the active template. Earlier Markdown-only snapshots remain visible in the version history.
+- Saving a template replaces its current title/body in place; named copies are the only revision mechanism.
 - The Editor is a visual WYSIWYG document backed by Markdown. Form fields resolve `{{PLACEHOLDER}}` values and `{{#IF FLAG}}…{{/IF}}` blocks only when Preview or Copy Markdown is used, so manual edits are preserved when form values change.
 - Copy Markdown places resolved Markdown and matching rich text on the clipboard. SignatureConfirm receives the rich formatting; plain-text destinations receive Markdown. Neither representation contains unresolved placeholder tokens.
 

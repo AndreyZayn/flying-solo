@@ -37,13 +37,13 @@ const templateWorkspaceButton = document.querySelector("#templateWorkspace");
 const batchWorkspaceButton = document.querySelector("#batchWorkspace");
 const templateManager = document.querySelector("#templateManager");
 const batchControls = document.querySelector("#batchControls");
-const templateSelect = document.querySelector("#templateSelect");
-const templateVersion = document.querySelector("#templateVersion");
-const templateHistory = document.querySelector("#templateHistory");
+const templateCards = document.querySelector("#templateCards");
+const templateSourceSelect = document.querySelector("#templateSourceSelect");
+const templateCreatePanel = document.querySelector("#templateCreatePanel");
+const showTemplateCreateButton = document.querySelector("#showTemplateCreate");
+const cancelTemplateCreateButton = document.querySelector("#cancelTemplateCreate");
 const newTemplateName = document.querySelector("#newTemplateName");
 const createTemplateButton = document.querySelector("#createTemplate");
-const openTemplateBuilderButton = document.querySelector("#openTemplateBuilder");
-const deleteTemplateButton = document.querySelector("#deleteTemplate");
 const placeholderSearch = document.querySelector("#placeholderSearch");
 const placeholderList = document.querySelector("#placeholderList");
 const reviewQueueSelect = document.querySelector("#reviewQueueSelect");
@@ -203,17 +203,50 @@ function activeFamily() {
   return activeTemplate()?.family ?? activeTemplateId;
 }
 
-function renderTemplateSelects() {
-  templateSelect.innerHTML = templateCatalog.map((template) =>
-    `<option value="${template.id}">${template.label}${template.builtIn ? "" : " · custom"}</option>`
-  ).join("");
-  templateSelect.value = templateCatalog.some((template) => template.id === activeTemplateId)
-    ? activeTemplateId
-    : templateCatalog[0]?.id ?? "";
+function renderTemplateLibrary() {
+  const selectedSourceId = templateSourceSelect.value;
   batchTemplateSelect.innerHTML = templateCatalog.map((template) =>
-    `<option value="${template.id}">${template.label}${template.builtIn ? "" : " · custom"}</option>`
+    `<option value="${template.id}">${template.label}</option>`
   ).join("");
   batchTemplateSelect.value = activeTemplateId;
+  templateSourceSelect.innerHTML = templateCatalog.map((template) =>
+    `<option value="${template.id}">${template.label}</option>`
+  ).join("");
+  if (templateCatalog.some((template) => template.id === selectedSourceId)) {
+    templateSourceSelect.value = selectedSourceId;
+  } else {
+    templateSourceSelect.value = activeTemplateId;
+  }
+  const cards = templateCatalog.map((template) => {
+    const card = document.createElement("article");
+    card.className = `template-card${template.id === activeTemplateId ? " active" : ""}`;
+    const heading = document.createElement("h3");
+    heading.textContent = template.label;
+    const detail = document.createElement("p");
+    detail.textContent = `Works with ${template.family === "membership" ? "Membership" : "Fashion Week"}`;
+    const actions = document.createElement("div");
+    actions.className = "template-card-actions";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "secondary-button";
+    open.textContent = template.id === activeTemplateId ? "Editing" : "Open";
+    open.disabled = template.id === activeTemplateId;
+    open.addEventListener("click", () => loadTemplate(template.id).catch(showError));
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "copy-template-button";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", () => openTemplateCreate(template.id));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "template-card-delete";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => deleteTemplate(template).catch(showError));
+    actions.append(open, copy, remove);
+    card.append(heading, detail, actions);
+    return card;
+  });
+  templateCards.replaceChildren(...cards);
 }
 
 function setWorkspace(mode) {
@@ -234,48 +267,6 @@ function setWorkspace(mode) {
   verifyContractButton.hidden = templates;
   if (templates) view = "editor";
   showResult();
-}
-
-function renderTemplateVersion(template) {
-  templateVersion.textContent = template
-    ? `${template.builtIn ? "Standard" : "Custom"} template · Version ${template.version}`
-    : "No template selected.";
-  deleteTemplateButton.hidden = !template;
-}
-
-async function renderTemplateHistory() {
-  templateHistory.replaceChildren();
-  const response = await fetch(`/api/templates/${encodeURIComponent(activeTemplateId)}/history`);
-  const history = await response.json();
-  if (!response.ok) throw new Error(history.error || "Unable to load template history.");
-  if (!history.length) {
-    templateHistory.textContent = "This is the first version.";
-    return;
-  }
-  for (const snapshot of history) {
-    const row = document.createElement("div");
-    row.className = "template-history-item";
-    const label = document.createElement("span");
-    label.textContent = `Version ${snapshot.version} · ${new Date(snapshot.savedAt).toLocaleString()}`;
-    const restore = document.createElement("button");
-    restore.type = "button";
-    restore.className = "template-history-restore";
-    restore.textContent = "Restore";
-    restore.addEventListener("click", () => restoreTemplate(snapshot.version).catch(showError));
-    const actions = document.createElement("div");
-    actions.className = "template-history-actions";
-    actions.append(restore);
-    if (snapshot.deletable) {
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "template-history-delete";
-      remove.textContent = "Delete version";
-      remove.addEventListener("click", () => deleteTemplateVersion(snapshot).catch(showError));
-      actions.append(remove);
-    }
-    row.append(label, actions);
-    templateHistory.append(row);
-  }
 }
 
 async function loadTemplate(templateId, { loadRecord = false } = {}) {
@@ -306,10 +297,8 @@ async function loadTemplate(templateId, { loadRecord = false } = {}) {
   titleEditor.setMarkdown(templateTitle, false);
   loadingRecord = false;
   configureFamilyControls();
-  renderTemplateSelects();
-  renderTemplateVersion(template);
+  renderTemplateLibrary();
   renderPlaceholderLibrary();
-  await renderTemplateHistory();
   if (workspaceMode === "templates" && view === "preview") showResult();
   if (loadRecord && selectedRecord()) await selectRecord(selectedRecord().id, { savePrevious: false });
 }
@@ -622,10 +611,19 @@ async function saveTemplate() {
   templateMarkdown = body.markdown;
   templateTitle = body.titleTemplate;
   templateCatalog = await fetch("/api/templates").then((response) => response.json());
-  renderTemplateSelects();
-  renderTemplateVersion(body);
-  await renderTemplateHistory();
-  showToast(`Template saved as version ${body.version}`);
+  renderTemplateLibrary();
+  showToast("Template saved");
+}
+
+function openTemplateCreate(sourceTemplateId = activeTemplateId) {
+  templateCreatePanel.hidden = false;
+  templateSourceSelect.value = sourceTemplateId;
+  newTemplateName.focus();
+}
+
+function closeTemplateCreate() {
+  templateCreatePanel.hidden = true;
+  newTemplateName.value = "";
 }
 
 async function createTemplate() {
@@ -633,7 +631,7 @@ async function createTemplate() {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      sourceTemplateId: activeTemplateId,
+      sourceTemplateId: templateSourceSelect.value,
       label: newTemplateName.value,
     }),
   });
@@ -641,30 +639,16 @@ async function createTemplate() {
   if (!response.ok) throw new Error(template.error || "Unable to create the template.");
   templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
   activeTemplateId = template.id;
-  newTemplateName.value = "";
+  closeTemplateCreate();
   await loadTemplate(activeTemplateId);
   setWorkspace("templates");
-  showToast("New template created");
+  showToast("Template created");
 }
 
-async function restoreTemplate(version) {
-  const response = await fetch(`/api/templates/${encodeURIComponent(activeTemplateId)}/restore`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ version }),
-  });
-  const template = await response.json();
-  if (!response.ok) throw new Error(template.error || "Unable to restore the template version.");
-  templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
-  await loadTemplate(template.id);
-  showToast(`Restored version ${version} as version ${template.version}`);
-}
-
-async function deleteActiveTemplate() {
-  const template = activeTemplate();
+async function deleteTemplate(template = activeTemplate()) {
   if (!template) throw new Error("Choose a contract template first.");
   const confirmed = window.confirm(
-    `Delete “${template.label}” from the library? Its saved versions will be permanently removed.`,
+    `Delete “${template.label}” from the library? This cannot be undone.`,
   );
   if (!confirmed) return;
   const response = await fetch(`/api/templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
@@ -678,20 +662,6 @@ async function deleteActiveTemplate() {
   await loadTemplate(replacement.id);
   setWorkspace("templates");
   showToast(`${result.label} deleted`);
-}
-
-async function deleteTemplateVersion(snapshot) {
-  if (!snapshot.deletable || !snapshot.snapshotId) throw new Error("This template version cannot be deleted.");
-  const confirmed = window.confirm(`Delete version ${snapshot.version}? This cannot be undone.`);
-  if (!confirmed) return;
-  const response = await fetch(
-    `/api/templates/${encodeURIComponent(activeTemplateId)}/history/${encodeURIComponent(snapshot.snapshotId)}`,
-    { method: "DELETE" },
-  );
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Unable to delete the template version.");
-  await renderTemplateHistory();
-  showToast(`Version ${result.version} deleted`);
 }
 
 async function verifyCurrentContract() {
@@ -1016,11 +986,9 @@ async function initialize() {
       showError(error);
     }
   });
-  templateSelect.addEventListener("change", () => loadTemplate(templateSelect.value).catch(showError));
-  openTemplateBuilderButton.addEventListener("click", () => loadTemplate(templateSelect.value)
-    .then(() => setWorkspace("templates")).catch(showError));
+  showTemplateCreateButton.addEventListener("click", () => openTemplateCreate());
+  cancelTemplateCreateButton.addEventListener("click", closeTemplateCreate);
   createTemplateButton.addEventListener("click", () => createTemplate().catch(showError));
-  deleteTemplateButton.addEventListener("click", () => deleteActiveTemplate().catch(showError));
   document.querySelector("#wysiwygEditor").addEventListener("focusin", () => { activeEditor = "body"; });
   document.querySelector("#titleWysiwygEditor").addEventListener("focusin", () => { activeEditor = "title"; });
   titleEditor.on("change", () => {

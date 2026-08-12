@@ -143,34 +143,6 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
       return sendJson(response, 400, { error: error.message });
     }
   }
-  const templateHistoryMatch = url.pathname.match(/^\/api\/templates\/([^/]+)\/history$/);
-  if (templateHistoryMatch && request.method === "GET") {
-    try {
-      return sendJson(response, 200, await templateStore.history(decodeURIComponent(templateHistoryMatch[1])));
-    } catch (error) {
-      return sendJson(response, 404, { error: error.message });
-    }
-  }
-  const templateHistoryDeletionMatch = url.pathname.match(/^\/api\/templates\/([^/]+)\/history\/([^/]+)$/);
-  if (templateHistoryDeletionMatch && request.method === "DELETE") {
-    try {
-      return sendJson(response, 200, await templateStore.removeHistory(
-        decodeURIComponent(templateHistoryDeletionMatch[1]),
-        decodeURIComponent(templateHistoryDeletionMatch[2]),
-      ));
-    } catch (error) {
-      return sendJson(response, /not available|Unknown contract template/.test(error.message) ? 404 : 400, { error: error.message });
-    }
-  }
-  const templateRestoreMatch = url.pathname.match(/^\/api\/templates\/([^/]+)\/restore$/);
-  if (templateRestoreMatch && request.method === "POST") {
-    try {
-      const { version } = await readJson(request);
-      return sendJson(response, 200, await templateStore.restore(decodeURIComponent(templateRestoreMatch[1]), version));
-    } catch (error) {
-      return sendJson(response, 400, { error: error.message });
-    }
-  }
   const templateMatch = url.pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (templateMatch && request.method === "GET") {
     try {

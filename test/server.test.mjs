@@ -64,31 +64,12 @@ test("deletes an unused custom template but protects a template used by the acti
   assert.deepEqual(deleted, ["paris-fashion-week-2027"]);
 });
 
-test("deletes one saved template version", async (context) => {
-  const removed = [];
-  const templateStore = {
-    removeHistory: async (templateId, snapshotId) => {
-      removed.push({ templateId, snapshotId });
-      return { id: templateId, version: 2, deleted: true };
-    },
-  };
-  const server = createAppServer({ reviewStore: createReadOnlyReviewStore(), templateStore });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
+test("does not expose template history routes", async (context) => {
+  const { server, baseUrl } = await startServer();
   context.after(() => server.close());
-  const { port } = server.address();
-  const response = await fetch(`http://127.0.0.1:${port}/api/templates/fashion-week/history/v002-2026-08-12T12-00-00.000Z.json`, {
-    method: "DELETE",
-  });
+  const response = await fetch(`${baseUrl}/api/templates/fashion-week/history`);
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { id: "fashion-week", version: 2, deleted: true });
-  assert.deepEqual(removed, [{
-    templateId: "fashion-week",
-    snapshotId: "v002-2026-08-12T12-00-00.000Z.json",
-  }]);
+  assert.equal(response.status, 404);
 });
 
 test("serves the dashboard and registry", async (context) => {
@@ -123,12 +104,13 @@ test("serves the dashboard and registry", async (context) => {
   assert.doesNotMatch(pageHtml, /id="reviewQueue"/);
   assert.match(pageHtml, /id="reviewProgress"/);
   assert.match(pageHtml, /id="verifyContract"[^>]*>Mark verified<\/button>/);
-  assert.match(pageHtml, /id="saveTemplate"[^>]*>Save template<\/button>/);
+  assert.match(pageHtml, /id="saveTemplate"[^>]*>Save changes<\/button>/);
   assert.match(pageHtml, /id="templateWorkspace"/);
-  assert.match(pageHtml, /id="templateSelect"/);
-  assert.match(pageHtml, /id="createTemplate"[^>]*>Create copy<\/button>/);
-  assert.match(pageHtml, /id="templateHistory"/);
-  assert.match(pageHtml, /id="deleteTemplate"[^>]*>Delete template<\/button>/);
+  assert.match(pageHtml, /id="templateCards"/);
+  assert.match(pageHtml, /id="showTemplateCreate"[^>]*>New template<\/button>/);
+  assert.match(pageHtml, /id="templateSourceSelect"/);
+  assert.doesNotMatch(pageHtml, /templateHistory|Version history|Delete version|Restore/);
+  assert.doesNotMatch(pageHtml, /id="deleteTemplate"/);
   assert.match(pageHtml, /id="titleWysiwygEditor"[^>]+aria-label="Contract title editor"/);
   assert.doesNotMatch(pageHtml, /id="membershipDemo"/);
   assert.match(pageHtml, /aria-label="Payment 1 due date"/);
@@ -211,7 +193,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(appSource, /new toastui\.Editor\(/);
   assert.match(appSource, /titleEditor/);
   assert.match(appSource, /templateWorkspaceButton\.addEventListener/);
-  assert.match(appSource, /\/api\/templates\/\$\{encodeURIComponent\(activeTemplateId\)\}\/history/);
+  assert.doesNotMatch(appSource, /\/history|restoreTemplate|deleteTemplateVersion/);
   assert.match(appSource, /from "\/editor-sizing\.mjs"/);
   assert.match(appSource, /from "\/placeholder-library\.mjs"/);
   assert.match(appSource, /from "\/review-selector\.mjs"/);

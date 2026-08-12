@@ -22,11 +22,11 @@ A shared queue, template store, editor, and verified-Markdown store serve contra
 
 ## User flow
 
-1. Anna selects a contract type and uploads an `.xlsx` file, or loads the local Membership demo.
+1. Anna selects a named contract template and uploads an `.xlsx` file, or loads the local Membership demo.
 2. The server parses every non-empty data row into one queue record and returns import counts and row-level issues.
 3. The first pending record opens in Preview. The queue shows all records, progress, source row, and attention state.
 4. Edit contract unlocks family-specific fields and the Markdown editor. Record edits autosave locally.
-5. Save template validates and versions the active family template.
+5. Save changes validates and updates the selected template in place; Anna makes a named copy when she wants a revision.
 6. Mark verified performs fresh family validation, resolves all placeholders, writes one immutable Markdown handoff, and advances to the next pending record.
 7. The batch is complete only when every record is verified.
 
@@ -49,4 +49,3 @@ Membership uses package, duration, and start-date inputs. The approved catalog d
 Automated tests cover Excel parsing, date/currency normalization, row issue reporting, atomic queue replacement, Membership derivations and placeholder resolution, family-specific template validation, APIs, and static UI controls.
 
 Browser review must cover uploading the supplied workbook, seeing all imported brands, navigating representative Fashion Week records (including an attention case), editing and returning to Preview, saving a template, loading and editing the Membership demo, verifying at least one Fashion Week record and the Membership demo in isolated fresh batches, and inspecting the resulting Markdown handoff files.
-

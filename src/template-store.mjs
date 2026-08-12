@@ -39,11 +39,11 @@ function validateDefinitions(definitions) {
 }
 
 function emptyState() {
-  return { schemaVersion: 1, builtIns: {}, customTemplates: [], deletedBuiltIns: [] };
+  return { schemaVersion: 2, builtIns: {}, customTemplates: [], deletedBuiltIns: [] };
 }
 
 function validateState(state) {
-  if (!state || state.schemaVersion !== 1 || typeof state.builtIns !== "object" || !Array.isArray(state.customTemplates)
+  if (!state || ![1, 2].includes(state.schemaVersion) || typeof state.builtIns !== "object" || !Array.isArray(state.customTemplates)
     || (state.deletedBuiltIns != null && !Array.isArray(state.deletedBuiltIns))) {
     throw new Error("Template library state is invalid.");
   }
@@ -56,13 +56,17 @@ function validateState(state) {
   for (const template of state.customTemplates) {
     if (!template || !TEMPLATE_ID_PATTERN.test(template.id ?? "") || ids.has(template.id)
       || !String(template.label ?? "").trim() || !TEMPLATE_ID_PATTERN.test(template.sourceTemplateId ?? "")
-      || !String(template.templateFile ?? "").trim() || !String(template.titleTemplate ?? "").trim()
-      || !Number.isSafeInteger(template.version) || template.version < 1) {
+      || !String(template.templateFile ?? "").trim() || !String(template.titleTemplate ?? "").trim()) {
       throw new Error("Custom template library state is invalid.");
     }
     ids.add(template.id);
   }
-  return { ...state, deletedBuiltIns };
+  return {
+    ...state,
+    schemaVersion: 2,
+    customTemplates: state.customTemplates.map(({ version, ...template }) => template),
+    deletedBuiltIns,
+  };
 }
 
 function publicTemplate(template) {
@@ -70,7 +74,6 @@ function publicTemplate(template) {
     id: template.id,
     label: template.label,
     family: template.family,
-    version: template.version,
     builtIn: template.builtIn,
   };
 }
@@ -83,25 +86,6 @@ function normalizedContent(content, template) {
     markdown: String(content?.markdown ?? ""),
     titleTemplate: String(content?.titleTemplate ?? ""),
   };
-}
-
-function historyDirectory(template) {
-  const parent = path.dirname(template.templateFile);
-  return `/${parent}/history/${template.id}`.replace(/^\//, "");
-}
-
-function historyTimestamp(filename) {
-  const matched = filename.replace(/\.md$/, "").match(/^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2}(?:\.\d+)?Z)$/);
-  if (!matched) return filename;
-  return `${matched[1]}:${matched[2]}:${matched[3]}`;
-}
-
-function validateSnapshot(snapshot) {
-  if (!Number.isSafeInteger(snapshot?.version) || snapshot.version < 1 || !snapshot.savedAt
-    || typeof snapshot.markdown !== "string" || typeof snapshot.titleTemplate !== "string") {
-    throw new Error("Template history snapshot is invalid.");
-  }
-  return snapshot;
 }
 
 function templateIdFromLabel(label, existingIds) {
@@ -142,27 +126,6 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     }
   }
 
-  async function legacyHistory(template) {
-    const directory = safePath(rootDir, historyDirectory(template));
-    try {
-      const entries = (await fs.readdir(directory)).filter((entry) => entry.endsWith(".md")).sort();
-      return Promise.all(entries.map(async (entry, index) => ({
-        version: index + 1,
-        savedAt: historyTimestamp(entry),
-        markdown: await fs.readFile(path.join(directory, entry), "utf8"),
-        titleTemplate: template.titleTemplate,
-      })));
-    } catch (error) {
-      if (error?.code === "ENOENT") return [];
-      throw error;
-    }
-  }
-
-  async function initialVersion(template, saved) {
-    if (Number.isSafeInteger(saved.version) && saved.version > 0) return saved.version;
-    return (await legacyHistory(template)).length + 1;
-  }
-
   async function definition(templateId) {
     const [registered, library] = await Promise.all([definitions(), state()]);
     const standard = registered.find((candidate) => candidate.id === templateId);
@@ -174,7 +137,6 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       return {
         ...standard,
         titleTemplate: saved.titleTemplate ?? standard.titleTemplate,
-        version: await initialVersion(standard, saved),
         builtIn: true,
       };
     }
@@ -242,10 +204,8 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     const builtIns = await Promise.all(registered
       .filter((template) => !library.deletedBuiltIns.includes(template.id))
       .map(async (template) => {
-        const saved = library.builtIns[template.id] ?? {};
         return publicTemplate({
           ...template,
-          version: await initialVersion(template, saved),
           builtIn: true,
         });
       }));
@@ -261,24 +221,6 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     return JSON.parse(await fs.readFile(safePath(rootDir, template.placeholderRegistryFile), "utf8"));
   }
 
-  async function history(templateId) {
-    const template = await definition(templateId);
-    const directory = safePath(rootDir, historyDirectory(template));
-    try {
-      const entries = await fs.readdir(directory);
-      const snapshots = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map(async (entry) => ({
-        ...validateSnapshot(JSON.parse(await fs.readFile(path.join(directory, entry), "utf8"))),
-        snapshotId: entry,
-        deletable: true,
-      })));
-      const legacy = (await legacyHistory(template)).map((snapshot) => ({ ...snapshot, deletable: false }));
-      return [...legacy, ...snapshots].sort((left, right) => right.version - left.version);
-    } catch (error) {
-      if (error?.code === "ENOENT") return legacyHistory(template);
-      throw error;
-    }
-  }
-
   async function save(templateId, content) {
     return locked(async () => {
       const template = await definition(templateId);
@@ -286,30 +228,17 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       await validateMarkdown(template, next.markdown);
       await validateTitleTemplate(template, next.titleTemplate);
       const filename = safePath(rootDir, template.templateFile);
-      const previous = {
-        version: template.version,
-        savedAt: now(),
-        markdown: await fs.readFile(filename, "utf8"),
-        titleTemplate: template.titleTemplate,
-      };
-      const historyFile = safePath(rootDir, path.join(
-        historyDirectory(template),
-        `v${String(previous.version).padStart(3, "0")}-${previous.savedAt.replaceAll(":", "-")}.json`,
-      ));
       const library = await state();
-      await writeJsonAtomic(historyFile, previous);
       await writeAtomic(filename, next.markdown);
       if (template.builtIn) {
         library.builtIns[template.id] = {
-          version: template.version + 1,
           titleTemplate: next.titleTemplate,
-          updatedAt: previous.savedAt,
+          updatedAt: now(),
         };
       } else {
         const custom = library.customTemplates.find((candidate) => candidate.id === template.id);
-        custom.version = template.version + 1;
         custom.titleTemplate = next.titleTemplate;
-        custom.updatedAt = previous.savedAt;
+        custom.updatedAt = now();
       }
       await writeJsonAtomic(statePath, library);
       return get(templateId);
@@ -331,39 +260,12 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
         sourceTemplateId: source.builtIn ? source.id : source.sourceTemplateId,
         templateFile,
         titleTemplate: source.titleTemplate,
-        version: 1,
         createdAt,
         updatedAt: createdAt,
       });
       await writeAtomic(safePath(rootDir, templateFile), await fs.readFile(safePath(rootDir, source.templateFile), "utf8"));
       await writeJsonAtomic(statePath, library);
       return get(id);
-    });
-  }
-
-  async function restore(templateId, version) {
-    const snapshot = (await history(templateId)).find((candidate) => candidate.version === Number(version));
-    if (!snapshot) throw new Error(`Template version ${version} is not available.`);
-    return save(templateId, snapshot);
-  }
-
-  async function removeHistory(templateId, snapshotId) {
-    return locked(async () => {
-      const template = await definition(templateId);
-      const normalizedSnapshotId = String(snapshotId ?? "");
-      if (path.basename(normalizedSnapshotId) !== normalizedSnapshotId || !normalizedSnapshotId.endsWith(".json")) {
-        throw new Error("Only saved runtime versions can be deleted.");
-      }
-      const filename = safePath(rootDir, path.join(historyDirectory(template), normalizedSnapshotId));
-      let snapshot;
-      try {
-        snapshot = validateSnapshot(JSON.parse(await fs.readFile(filename, "utf8")));
-      } catch (error) {
-        if (error?.code === "ENOENT") throw new Error("Template version is not available.");
-        throw error;
-      }
-      await fs.rm(filename);
-      return { id: template.id, version: snapshot.version, deleted: true };
     });
   }
 
@@ -382,14 +284,6 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
           builtIns: nextBuiltIns,
           deletedBuiltIns: [...library.deletedBuiltIns, standard.id],
         });
-        const directory = safePath(rootDir, historyDirectory(standard));
-        try {
-          const entries = await fs.readdir(directory);
-          await Promise.all(entries.filter((entry) => entry.endsWith(".json"))
-            .map((entry) => fs.rm(path.join(directory, entry), { force: true })));
-        } catch (error) {
-          if (error?.code !== "ENOENT") throw error;
-        }
         return { id: standard.id, label: standard.label, deleted: true };
       }
       const template = await definition(templateId);
@@ -403,11 +297,10 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       await writeJsonAtomic(statePath, { ...library, customTemplates: nextTemplates });
       await Promise.all([
         fs.rm(safePath(rootDir, template.templateFile), { force: true }),
-        fs.rm(safePath(rootDir, historyDirectory(template)), { force: true, recursive: true }),
       ]);
       return { id: template.id, label: template.label, deleted: true };
     });
   }
 
-  return { list, get, save, create, history, restore, removeHistory, remove, placeholders, definition };
+  return { list, get, save, create, remove, placeholders, definition };
 }

@@ -19,21 +19,19 @@
     <main class="workspace">
       <aside class="control-panel">
         <section id="templateManager" class="template-manager" aria-labelledby="templateManagerTitle">
-          <p class="eyebrow">Prepare reusable wording</p>
-          <h2 id="templateManagerTitle">Templates</h2>
-          <p class="template-manager-copy">Choose a contract template, then update it or create a copy before starting a batch.</p>
-          <label>Contract template<select id="templateSelect" aria-label="Contract template"></select></label>
-          <p id="templateVersion" class="template-version">Loading template…</p>
-          <div class="template-actions">
-            <button id="openTemplateBuilder" class="primary-button" type="button">Open template builder</button>
-            <button id="deleteTemplate" class="delete-template-button" type="button" hidden>Delete template</button>
-          </div>
-          <label class="new-template-label">Name this template copy<input id="newTemplateName" type="text" placeholder="e.g. Paris Fashion Week 2027"></label>
-          <button id="createTemplate" class="secondary-button" type="button">Create copy</button>
-          <section class="template-history-section" aria-labelledby="templateHistoryTitle">
-            <h3 id="templateHistoryTitle">Version history</h3>
-            <div id="templateHistory" class="template-history"></div>
+          <p class="eyebrow">Reusable agreements</p>
+          <h2 id="templateManagerTitle">Template library</h2>
+          <p class="template-manager-copy">Each card is a complete contract template. To make a revision, copy one and name it yourself — for example, “Fashion Week v1”.</p>
+          <button id="showTemplateCreate" class="primary-button" type="button">New template</button>
+          <section id="templateCreatePanel" class="template-create-panel" aria-label="Create a template" hidden>
+            <label>Template name<input id="newTemplateName" type="text" placeholder="e.g. Fashion Week v1"></label>
+            <label>Start with<select id="templateSourceSelect" aria-label="Start with template"></select></label>
+            <div class="template-create-actions">
+              <button id="createTemplate" class="primary-button" type="button">Create template</button>
+              <button id="cancelTemplateCreate" class="secondary-button" type="button">Cancel</button>
+            </div>
           </section>
+          <div id="templateCards" class="template-cards" aria-live="polite"></div>
         </section>
 
         <div id="batchControls" hidden>
@@ -143,7 +141,7 @@
             <button id="editorTab" class="tab" type="button" aria-pressed="false">Edit contract</button>
           </div>
           <div class="document-actions">
-            <button id="saveTemplate" class="secondary-button editor-only-action" type="button" hidden>Save template</button>
+            <button id="saveTemplate" class="secondary-button editor-only-action" type="button" hidden>Save changes</button>
             <button id="copyMarkdown" class="secondary-button" type="button" disabled>Copy Markdown</button>
             <button id="verifyContract" class="primary-button" type="button" disabled>Mark verified</button>
           </div>
