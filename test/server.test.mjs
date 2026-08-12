@@ -53,7 +53,10 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /id="previewTab"[^>]+class="tab active"[^>]+disabled[^>]*>Preview<\/button>/);
   assert.match(pageHtml, /id="editorTab"[^>]*>Edit contract<\/button>/);
   assert.match(pageHtml, /id="copyMarkdown"[^>]+disabled[^>]*>Copy Markdown<\/button>/);
-  assert.match(pageHtml, /id="reviewQueue"/);
+  assert.match(pageHtml, /id="reviewQueueSelect"[^>]+aria-label="Select a contract"/);
+  assert.match(pageHtml, /id="selectedRecordStatus"[^>]+class="review-selector-status"/);
+  assert.match(pageHtml, /id="selectedRecordContext"/);
+  assert.doesNotMatch(pageHtml, /id="reviewQueue"/);
   assert.match(pageHtml, /id="reviewProgress"/);
   assert.match(pageHtml, /id="verifyContract"[^>]*>Mark verified<\/button>/);
   assert.match(pageHtml, /id="saveTemplate"[^>]*>Save template<\/button>/);
@@ -137,11 +140,15 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(appSource, /new toastui\.Editor\(/);
   assert.match(appSource, /from "\/editor-sizing\.mjs"/);
   assert.match(appSource, /from "\/placeholder-library\.mjs"/);
+  assert.match(appSource, /from "\/review-selector\.mjs"/);
   assert.match(appSource, /fetch\(`\/api\/placeholders\?templateId=/);
   assert.match(appSource, /\/api\/import-workbook\?templateId=/);
   assert.match(appSource, /\/api\/demo\/membership/);
   assert.match(appSource, /fetch\("\/api\/review-queue"\)/);
+  assert.match(appSource, /reviewQueueSelect\.addEventListener\("change"/);
+  assert.match(appSource, /nextIncompleteRecord\(reviewQueue\.records, record\.id\)/);
   assert.match(appSource, /\/api\/review-queue\/\$\{encodeURIComponent\(record\.id\)\}\/verify/);
+  assert.match(appSource, /async function verifyCurrentContract\(\)[\s\S]*?await saveCurrentDraft\(\);[\s\S]*?await generate\(\);/);
   assert.match(appSource, /\/api\/templates\/\$\{encodeURIComponent\(activeTemplateId\)\}/);
   assert.match(appSource, /contractEditor\.insertText\(placeholderInsertionText\(placeholder\)\)/);
   assert.match(appSource, /displayPlaceholderValue\(placeholder, currentResult\?\.placeholders/);
@@ -193,6 +200,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(styles, /\.placeholder-library\s*\{[^}]*margin-top:/s);
   assert.match(styles, /\.placeholder-item\s*\{[^}]*border:/s);
   assert.match(styles, /\.placeholder-token\s*\{[^}]*font-family:/s);
+  assert.match(styles, /\.review-selector-status\.verified\s*\{[^}]*color:\s*#2f6336/s);
   assert.match(styles, /\.source-indicator\s*\{[^}]*color:\s*var\(--accent\)[^}]*font-size:/s);
   assert.match(styles, /\.source-indicator::after\s*\{[^}]*content:\s*attr\(data-tooltip\)[^}]*opacity:\s*0/s);
   assert.match(styles, /\.source-indicator:hover::after,[\s\S]*\.source-indicator:focus-visible::after\s*\{[^}]*opacity:\s*1/s);

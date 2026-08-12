@@ -30,17 +30,14 @@ button, input, select { font: inherit; }
 .review-queue-header { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
 .review-queue-header h2 { margin: 0; font-family: Georgia, serif; font-size: 18px; }
 .review-progress { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.review-queue { display: grid; gap: 7px; margin-top: 13px; }
-.review-record { width: 100%; padding: 10px 11px; border: 1px solid #d9d4c9; border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; text-align: left; }
-.review-record:hover { border-color: #a9a397; }
-.review-record.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
-.review-record.verified { background: #f1f7f1; }
-.review-record.attention:not(.verified) { border-color: #c99043; background: #fff8eb; }
-.review-record-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.review-record strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.review-record small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
-.review-state { flex: none; color: #766129; font-size: 9px; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
-.review-record.verified .review-state { color: #2f6336; }
+.review-selector-label { margin: 13px 0 6px; color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.review-selector { background: #fff; font-weight: 750; }
+.review-selector-detail { display: flex; align-items: center; gap: 7px; min-height: 22px; padding-top: 6px; }
+.review-selector-status { flex: none; color: #766129; font-size: 10px; font-weight: 850; }
+.review-selector-status.verified { color: #2f6336; }
+.review-selector-status.attention { color: #9a5b1f; }
+.review-selector-status.changes-pending { color: #8b5e12; }
+.review-selector-context { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .batch-complete { margin-top: 12px; padding: 10px; border: 1px solid #bdd2bf; border-radius: 8px; background: #e8f2e8; color: #2f6336; font-size: 11px; font-weight: 800; }
 .status-row { display: flex; justify-content: flex-end; min-height: 24px; }
 .output-bar, .document-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; }

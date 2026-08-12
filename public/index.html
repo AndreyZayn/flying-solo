@@ -32,7 +32,12 @@
             </div>
           </div>
           <div id="batchComplete" class="batch-complete" hidden>All contracts verified and stored.</div>
-          <div id="reviewQueue" class="review-queue" aria-label="Contracts to review"></div>
+          <label class="review-selector-label" for="reviewQueueSelect">Uploaded brand</label>
+          <select id="reviewQueueSelect" class="review-selector" aria-label="Select a contract"></select>
+          <div class="review-selector-detail">
+            <span id="selectedRecordStatus" class="review-selector-status"></span>
+            <span id="selectedRecordContext" class="review-selector-context"></span>
+          </div>
         </section>
 
         <div class="status-row">

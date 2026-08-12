@@ -33,6 +33,7 @@ const staticFiles = new Map([
   ["/editor-sizing.mjs", [path.join(rootDir, "public/editor-sizing.mjs"), "text/javascript; charset=utf-8"]],
   ["/placeholder-library.mjs", [path.join(rootDir, "public/placeholder-library.mjs"), "text/javascript; charset=utf-8"]],
   ["/family-fields.mjs", [path.join(rootDir, "public/family-fields.mjs"), "text/javascript; charset=utf-8"]],
+  ["/review-selector.mjs", [path.join(rootDir, "public/review-selector.mjs"), "text/javascript; charset=utf-8"]],
   ["/schedule.mjs", [path.join(rootDir, "src/schedule.mjs"), "text/javascript; charset=utf-8"]],
   ["/vendor/toastui-editor.min.css", [path.join(rootDir, "node_modules/@toast-ui/editor/dist/toastui-editor.css"), "text/css; charset=utf-8"]],
   ["/vendor/toastui-editor-all.min.js", [path.join(rootDir, "public/vendor/toastui-editor-all.min.js"), "text/javascript; charset=utf-8"]],

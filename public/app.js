@@ -2,6 +2,7 @@ import { calculateDueDates, splitPaymentAmounts } from "/schedule.mjs";
 import { calculateEditorHeight, isResizeHandlePointer } from "/editor-sizing.mjs";
 import { selectFashionWeekCategory } from "/family-fields.mjs";
 import { normalizeEditorMarkdown, resolveMarkdownTemplate } from "/markdown-template.mjs";
+import { nextIncompleteRecord, reviewRecordPresentation } from "/review-selector.mjs";
 import {
   displayPlaceholderValue,
   matchesPlaceholder,
@@ -34,7 +35,9 @@ const copyMarkdownButton = document.querySelector("#copyMarkdown");
 const toast = document.querySelector("#toast");
 const placeholderSearch = document.querySelector("#placeholderSearch");
 const placeholderList = document.querySelector("#placeholderList");
-const reviewQueueElement = document.querySelector("#reviewQueue");
+const reviewQueueSelect = document.querySelector("#reviewQueueSelect");
+const selectedRecordStatus = document.querySelector("#selectedRecordStatus");
+const selectedRecordContext = document.querySelector("#selectedRecordContext");
 const reviewProgress = document.querySelector("#reviewProgress");
 const batchComplete = document.querySelector("#batchComplete");
 const verifyContractButton = document.querySelector("#verifyContract");
@@ -63,6 +66,7 @@ let editorHeightFrame;
 let editorManuallySized = false;
 let generateController;
 let generateRevision = 0;
+let loadingRecord = false;
 
 function money(value) {
   return new Intl.NumberFormat("en-US", {
@@ -172,8 +176,22 @@ function selectedRecord() {
 }
 
 function syncFieldEditability() {
-  const inputEditable = view === "editor" && selectedRecord()?.status !== "verified";
+  const inputEditable = view === "editor";
   form.querySelectorAll("input, select").forEach((control) => { control.disabled = !inputEditable; });
+}
+
+function updateVerificationAction() {
+  const status = selectedRecord()?.status;
+  verifyContractButton.textContent = status === "changes_pending" ? "Update verification" : "Mark verified";
+  verifyContractButton.disabled = !currentResult || status === "verified";
+}
+
+function markSelectedRecordChanged() {
+  const record = selectedRecord();
+  if (record?.status !== "verified") return;
+  record.status = "changes_pending";
+  renderReviewQueue();
+  updateVerificationAction();
 }
 
 function updatePriceSummary() {
@@ -284,7 +302,11 @@ function enableEditorSizing() {
     }
   });
   contractEditor.on("change", fitEditorToDocument);
-  contractEditor.on("change", scheduleDraftSave);
+  contractEditor.on("change", () => {
+    if (loadingRecord || view !== "editor") return;
+    markSelectedRecordChanged();
+    scheduleDraftSave();
+  });
   window.addEventListener("resize", fitEditorToDocument);
   editorResizeHandle.addEventListener("pointerdown", beginEditorResize);
   fitEditorToDocument();
@@ -344,7 +366,7 @@ function showResult() {
   editorTab.setAttribute("aria-pressed", String(editorVisible));
   previewTab.setAttribute("aria-pressed", String(!editorVisible));
   saveTemplateButton.hidden = !editorVisible;
-  verifyContractButton.disabled = !currentResult || selectedRecord()?.status === "verified";
+  updateVerificationAction();
   syncFieldEditability();
   if (editorVisible) {
     fitEditorToDocument();
@@ -359,25 +381,28 @@ function showResult() {
 
 function renderReviewQueue() {
   if (!reviewQueue) return;
-  reviewQueueElement.replaceChildren();
-  const { total, verified, pending, complete } = reviewQueue.progress;
+  reviewQueueSelect.replaceChildren();
+  const total = reviewQueue.records.length;
+  const verified = reviewQueue.records.filter((record) => record.status === "verified").length;
+  const pending = total - verified;
+  const complete = total > 0 && pending === 0;
+  reviewQueue.progress = { total, verified, pending, complete };
   reviewProgress.textContent = `${verified} of ${total} verified · ${pending} remaining`;
   batchComplete.hidden = !complete;
   for (const record of reviewQueue.records) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `review-record ${record.status}`;
-    button.classList.toggle("attention", Boolean(record.importIssues?.length));
-    button.classList.toggle("selected", record.id === selectedRecordId);
-    button.innerHTML = `<span class="review-record-top"><strong></strong><span class="review-state"></span></span><small></small>`;
-    button.querySelector("strong").textContent = record.input.brand;
-    button.querySelector(".review-state").textContent = record.status === "verified" ? "Verified" : record.importIssues?.length ? "Attention" : "Pending";
-    button.querySelector("small").textContent = activeTemplateId === "membership"
-      ? `${record.input.durationMonths} months · ${record.input.packageId}`
-      : `${record.input.eventCode} · ${record.input.eventMonth}${record.sourceRow ? ` · row ${record.sourceRow}` : ""}`;
-    button.addEventListener("click", () => selectRecord(record.id).catch(showError));
-    reviewQueueElement.append(button);
+    const presentation = reviewRecordPresentation(record, activeTemplateId);
+    const option = document.createElement("option");
+    option.value = record.id;
+    option.textContent = presentation.optionLabel;
+    reviewQueueSelect.append(option);
   }
+  reviewQueueSelect.value = selectedRecordId ?? reviewQueue.records[0]?.id ?? "";
+  const presentation = selectedRecord()
+    ? reviewRecordPresentation(selectedRecord(), activeTemplateId)
+    : undefined;
+  selectedRecordStatus.textContent = presentation ? `${presentation.symbol} ${presentation.label}` : "";
+  selectedRecordStatus.className = `review-selector-status ${presentation?.state ?? ""}`;
+  selectedRecordContext.textContent = presentation?.context ?? "";
 }
 
 async function refreshReviewQueue() {
@@ -390,7 +415,7 @@ async function refreshReviewQueue() {
 
 async function saveCurrentDraft({ quiet = true } = {}) {
   const record = selectedRecord();
-  if (!record || record.status === "verified" || !contractEditor) return;
+  if (!record || !contractEditor) return;
   const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/draft`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -402,6 +427,8 @@ async function saveCurrentDraft({ quiet = true } = {}) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Unable to save draft.");
   Object.assign(record, body);
+  renderReviewQueue();
+  updateVerificationAction();
   if (!quiet) showToast("Draft saved");
 }
 
@@ -419,7 +446,9 @@ async function selectRecord(recordId, { savePrevious = true } = {}) {
   if (!record) throw new Error(`Unknown review record: ${recordId}.`);
   activeTemplateId = reviewQueue.batch.templateId;
   writeInput(record.input);
+  loadingRecord = true;
   contractEditor.setMarkdown(record.draftMarkdown || templateMarkdown, false);
+  loadingRecord = false;
   editorManuallySized = false;
   view = "preview";
   syncFieldEditability();
@@ -443,6 +472,7 @@ async function saveTemplate() {
 async function verifyCurrentContract() {
   const record = selectedRecord();
   if (!record || record.status === "verified") return;
+  await saveCurrentDraft();
   await generate();
   if (!currentResult) throw new Error("Resolve contract errors before verification.");
   const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/verify`, {
@@ -458,7 +488,7 @@ async function verifyCurrentContract() {
   if (!response.ok) throw new Error(body.error || "Unable to verify contract.");
   await refreshReviewQueue();
   showToast("Contract verified and stored");
-  const next = reviewQueue.records.find((candidate) => candidate.status === "pending");
+  const next = nextIncompleteRecord(reviewQueue.records, record.id);
   if (next) {
     selectedRecordId = undefined;
     await selectRecord(next.id, { savePrevious: false });
@@ -489,7 +519,7 @@ async function generate() {
     currentResult = body;
     previewTab.disabled = false;
     copyMarkdownButton.disabled = false;
-    verifyContractButton.disabled = selectedRecord()?.status === "verified";
+    updateVerificationAction();
     errorElement.hidden = true;
     statusBadge.textContent = "Valid";
     statusBadge.className = "status-badge valid";
@@ -509,6 +539,7 @@ async function generate() {
 }
 
 function scheduleGenerate() {
+  markSelectedRecordChanged();
   clearTimeout(renderTimer);
   generateController?.abort();
   generateRevision += 1;
@@ -708,12 +739,13 @@ async function initialize() {
   });
   saveTemplateButton.addEventListener("click", () => saveTemplate().catch(showError));
   verifyContractButton.addEventListener("click", () => verifyCurrentContract().catch(showError));
+  reviewQueueSelect.addEventListener("change", () => selectRecord(reviewQueueSelect.value).catch(showError));
   placeholderSearch.addEventListener("input", renderPlaceholderLibrary);
   uploadWorkbookButton.addEventListener("click", () => uploadWorkbook().catch(showError));
   membershipDemoButton.addEventListener("click", () => loadMembershipDemo().catch(showError));
   renderPlaceholderLibrary();
   renderReviewQueue();
-  const firstRecord = reviewQueue.records.find((record) => record.status === "pending") ?? reviewQueue.records[0];
+  const firstRecord = reviewQueue.records.find((record) => record.status !== "verified") ?? reviewQueue.records[0];
   await selectRecord(firstRecord.id, { savePrevious: false });
 }
 

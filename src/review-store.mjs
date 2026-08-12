@@ -24,7 +24,7 @@ function validateQueue(queue) {
     if (!record?.id || ids.has(record.id) || !record.input || typeof record.input !== "object") {
       throw new Error("Every review record requires a unique id and input object.");
     }
-    if (!["pending", "verified"].includes(record.status)) {
+    if (!["pending", "changes_pending", "verified"].includes(record.status)) {
       throw new Error(`Unsupported review status: ${record.status}.`);
     }
     ids.add(record.id);
@@ -43,8 +43,31 @@ async function writeJsonAtomic(filename, value) {
   await fs.rename(temporary, filename);
 }
 
+async function writeTextAtomic(filename, value) {
+  await fs.mkdir(path.dirname(filename), { recursive: true });
+  const temporary = `${filename}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(temporary, value, "utf8");
+  await fs.rename(temporary, filename);
+}
+
 function pathPart(value) {
   return String(value).trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function handoffMetadata(markdown) {
+  const revision = Number(markdown.match(/^revision:\s+(\d+)$/m)?.[1] ?? 1);
+  const contentHash = markdown.match(/^content_sha256:\s+"([a-f0-9]{64})"$/m)?.[1];
+  const verifiedAtValue = markdown.match(/^verified_at:\s+(.+)$/m)?.[1];
+  let verifiedAt;
+  try {
+    verifiedAt = JSON.parse(verifiedAtValue);
+  } catch {
+    verifiedAt = undefined;
+  }
+  if (!contentHash || !Number.isSafeInteger(revision) || revision < 1) {
+    throw new Error("Existing verified Markdown handoff has invalid revision metadata.");
+  }
+  return { contentHash, revision, verifiedAt };
 }
 
 function handoffMarkdown(contract) {
@@ -59,6 +82,8 @@ title: ${JSON.stringify(contract.title)}
 verified_at: ${JSON.stringify(contract.verifiedAt)}
 verified_by: ${JSON.stringify(contract.verifiedBy)}
 content_sha256: ${JSON.stringify(contract.contentHash)}
+revision: ${contract.revision}
+supersedes_sha256: ${JSON.stringify(contract.supersedesHash ?? null)}
 ---
 
 # Verified contract
@@ -136,12 +161,14 @@ export function createReviewStore({
       const queue = validateQueue(await readJson(queuePath));
       const record = queue.records.find((candidate) => candidate.id === recordId);
       if (!record) throw new Error(`Unknown review record: ${recordId}.`);
-      if (record.status === "verified") throw new Error(`${recordId} is already verified.`);
       if (!input || typeof input !== "object" || typeof draftMarkdown !== "string") {
         throw new Error("Draft requires input and Markdown.");
       }
+      const changed = JSON.stringify(record.input) !== JSON.stringify(input)
+        || record.draftMarkdown !== draftMarkdown;
       record.input = clone(input);
       record.draftMarkdown = draftMarkdown;
+      if (record.status === "verified" && changed) record.status = "changes_pending";
       record.updatedAt = now();
       await writeJsonAtomic(queuePath, queue);
       return clone(record);
@@ -163,7 +190,17 @@ export function createReviewStore({
       if (completed.resolvedMarkdown.includes("{{") || completed.resolvedMarkdown.includes("}}")) {
         throw new Error("Verified contract cannot contain unresolved placeholders.");
       }
-      const verifiedAt = now();
+      const contentHash = createHash("sha256").update(completed.resolvedMarkdown, "utf8").digest("hex");
+      const filename = `${pathPart(queue.batch.id)}--${pathPart(record.id)}.md`;
+      const verifiedContractPath = path.join(verifiedContractsDirectory, filename);
+      let existing;
+      try {
+        existing = handoffMetadata(await fs.readFile(verifiedContractPath, "utf8"));
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      const recovering = existing?.contentHash === contentHash;
+      const verifiedAt = recovering && existing.verifiedAt ? existing.verifiedAt : now();
       const verifiedContract = {
         id: `${queue.batch.id}:${record.id}`,
         batchId: queue.batch.id,
@@ -173,24 +210,19 @@ export function createReviewStore({
         input: clone(completed.input),
         templateMarkdown: completed.templateMarkdown,
         resolvedMarkdown: completed.resolvedMarkdown,
-        contentHash: createHash("sha256").update(completed.resolvedMarkdown, "utf8").digest("hex"),
+        contentHash,
         verifiedAt,
         verifiedBy: "Anna",
+        revision: existing ? existing.revision + (recovering ? 0 : 1) : 1,
+        supersedesHash: existing && !recovering ? existing.contentHash : null,
       };
-      const filename = `${pathPart(queue.batch.id)}--${pathPart(record.id)}.md`;
-      const verifiedContractPath = path.join(verifiedContractsDirectory, filename);
-      try {
-        await fs.writeFile(verifiedContractPath, handoffMarkdown(verifiedContract), { encoding: "utf8", flag: "wx" });
-      } catch (error) {
-        if (error?.code === "EEXIST") {
-          throw new Error(`${recordId} already has a verified Markdown handoff file.`);
-        }
-        throw error;
-      }
+      if (!recovering) await writeTextAtomic(verifiedContractPath, handoffMarkdown(verifiedContract));
       record.input = clone(completed.input);
       record.draftMarkdown = completed.templateMarkdown;
       record.status = "verified";
       record.verifiedAt = verifiedAt;
+      record.contentHash = contentHash;
+      record.revision = verifiedContract.revision;
       record.updatedAt = verifiedAt;
       await writeJsonAtomic(queuePath, queue);
       return { record: clone(record), progress: progress(queue) };
