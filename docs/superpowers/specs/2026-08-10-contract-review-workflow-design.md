@@ -28,7 +28,7 @@ Out of scope:
 - `config/contract-templates.json`: approved template registry.
 - `data/review-queue.example.json`: documented normalized input example.
 - `data/runtime/review-queue.json`: active batch and per-brand review state.
-- `data/runtime/completed-contracts.json`: append-only verified contract archive for future agents.
+- `data/runtime/verified-contracts/<batch-id>--<record-id>.md`: one marked verified Markdown handoff file per contract for downstream SignatureConfirm agents.
 - `templates/history/<template-id>/`: timestamped template backups.
 
 The runtime directory is local operational data and is not pushed to GitHub.
@@ -40,12 +40,12 @@ The runtime directory is local operational data and is not pushed to GitHub.
 3. Selecting a brand fills the variable fields and renders the chosen template.
 4. Anna reviews Preview; Editor remains available for record-specific changes.
 5. Draft text and field edits are saved when switching records.
-6. Mark Verified performs server-side contract validation, archives the exact completed contract, updates the queue, and advances to the next pending record.
+6. Mark Verified performs server-side contract validation, creates a no-overwrite verified Markdown handoff file, updates the queue, and advances to the next pending record.
 7. When no pending records remain, the app shows the batch as complete.
 
 ## Safety and validation
 
 - Saved templates must use only registered placeholders, keep required placeholders, and contain balanced condition blocks.
 - Verification always rebuilds commercial values server-side and rejects invalid payment totals or unresolved placeholders.
-- JSON writes are atomic.
-- Verified output is never silently replaced; a repeated verification for the same record is rejected.
+- JSON writes are atomic for the active review queue.
+- Verified handoff files contain explicit status/definition sections and are created without overwrite; a repeated verification for the same record is rejected.

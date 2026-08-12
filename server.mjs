@@ -14,14 +14,14 @@ const placeholderRegistryPromise = fs.readFile(
   path.join(rootDir, "config/fashion-week-placeholders.json"),
   "utf8",
 ).then(JSON.parse).then(validatePlaceholderRegistry);
-const defaultReviewStore = createReviewStore({
-  examplePath: path.join(rootDir, "data/review-queue.example.json"),
-  queuePath: path.join(rootDir, "data/runtime/review-queue.json"),
-  archivePath: path.join(rootDir, "data/runtime/completed-contracts.json"),
-});
 const defaultTemplateStore = createTemplateStore({
   rootDir,
   registryPath: path.join(rootDir, "config/contract-templates.json"),
+});
+const defaultReviewStore = createReviewStore({
+  examplePath: path.join(rootDir, "data/review-queue.example.json"),
+  queuePath: path.join(rootDir, "data/runtime/review-queue.json"),
+  verifiedContractsDirectory: path.join(rootDir, "data/runtime/verified-contracts"),
 });
 const staticFiles = new Map([
   ["/", [path.join(rootDir, "public/index.html"), "text/html; charset=utf-8"]],
@@ -124,9 +124,6 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   }
   if (request.method === "GET" && url.pathname === "/api/review-queue") {
     return sendJson(response, 200, await reviewStore.getQueue());
-  }
-  if (request.method === "GET" && url.pathname === "/api/completed-contracts") {
-    return sendJson(response, 200, await reviewStore.getArchive());
   }
   const draftMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/draft$/);
   if (draftMatch && request.method === "PUT") {

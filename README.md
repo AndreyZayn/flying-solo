@@ -10,6 +10,14 @@ npm start
 
 Open `http://localhost:4173`.
 
+## Temporary verified-contract handoff
+
+Each run uses local temporary files only. When Anna marks a contract verified, the app creates one Markdown file at `data/runtime/verified-contracts/<batch-id>--<record-id>.md`.
+
+Every handoff file is marked `status: verified` in YAML frontmatter and contains the normalized Flying Solo input, reviewed template Markdown, exact resolved contract Markdown, reviewer/time, and SHA-256 hash. A SignatureConfirm agent may use only the **Verified contract Markdown** section from these files to create a draft; it must not alter the file or use a pending review record.
+
+`data/runtime/` is ignored by Git and may be removed after the run is complete and the needed SignatureConfirm drafts have been created.
+
 ## Test
 
 ```bash
@@ -30,8 +38,8 @@ npm test
 
 - `data/review-queue.example.json` documents the normalized input boundary for a batch. XLS or agent parsing should produce this shape; parsing is intentionally outside this app for now.
 - On first run, the app copies that example to `data/runtime/review-queue.json`. Draft field values and per-brand template edits are saved there automatically.
-- Clicking **Mark verified** validates and stores the exact template Markdown, resolved Markdown, normalized input, title, time, and reviewer in `data/runtime/completed-contracts.json`.
-- `data/runtime/` is intentionally excluded from Git because it contains operational brand data. Future local agents should read `completed-contracts.json` as the completed-contract handoff.
+- Clicking **Mark verified** validates and writes one marked verified-contract Markdown handoff file under `data/runtime/verified-contracts/`.
+- `data/runtime/` is intentionally excluded from Git because it contains temporary operational brand data. Future SignatureConfirm agents should use only files marked `status: verified`; they must not use pending local drafts as a contract source.
 - A batch is complete only when every record in its review queue is verified.
 - Preview mode shows sourced fields as read-only alongside the resolved contract. **Edit contract** unlocks fields and reveals the placeholder controls and visual editor.
 

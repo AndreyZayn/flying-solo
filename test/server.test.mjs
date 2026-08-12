@@ -3,8 +3,22 @@ import assert from "node:assert/strict";
 
 import { createAppServer } from "../server.mjs";
 
+function createReadOnlyReviewStore() {
+  return {
+    initialize: async () => {},
+    getQueue: async () => ({
+      schemaVersion: 1,
+      batch: { id: "batch", templateId: "fashion-week" },
+      records: [{ id: "brand-1", status: "pending", input: {} }],
+      progress: { total: 1, verified: 0, pending: 1, complete: false },
+    }),
+    saveDraft: async () => { throw new Error("Read-only test review store"); },
+    verify: async () => { throw new Error("Read-only test review store"); },
+  };
+}
+
 async function startServer() {
-  const server = createAppServer();
+  const server = createAppServer({ reviewStore: createReadOnlyReviewStore() });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
@@ -225,7 +239,6 @@ test("persists review drafts and verifies the exact resolved contract through th
       records: [{ id: "brand-1", status: "pending", input: {} }],
       progress: { total: 1, verified: 0, pending: 1, complete: false },
     }),
-    getArchive: async () => ({ schemaVersion: 1, contracts: [] }),
     saveDraft: async (id, draft) => { savedDraft = { id, ...draft }; return { id, status: "pending", ...draft }; },
     verify: async (id, contract) => {
       verified = { id, ...contract };
