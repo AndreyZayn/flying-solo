@@ -372,8 +372,9 @@ function fitEditorToDocument() {
   cancelAnimationFrame(editorHeightFrame);
   editorHeightFrame = requestAnimationFrame(() => {
     if (editorManuallySized || editorPanel.hidden) return;
-    const toolbar = editorPanel.querySelector(".toastui-editor-defaultUI-toolbar");
-    const content = editorPanel.querySelector(".toastui-editor-ww-container .ProseMirror");
+    const bodyEditorHost = document.querySelector("#wysiwygEditor");
+    const toolbar = bodyEditorHost.querySelector(".toastui-editor-defaultUI-toolbar");
+    const content = bodyEditorHost.querySelector(".toastui-editor-ww-container .ProseMirror");
     if (!toolbar || !content) return;
     const height = calculateEditorHeight({
       toolbarHeight: toolbar.offsetHeight,
@@ -921,8 +922,8 @@ async function initialize() {
     hideModeSwitch: true,
     usageStatistics: false,
     autofocus: false,
-    height: "100px",
-    minHeight: "100px",
+    height: "116px",
+    minHeight: "116px",
     toolbarItems: [["bold", "italic"]],
     widgetRules: [{
       rule: /\{\{(?:#IF\s+[A-Z0-9_]+|\/IF|[A-Z0-9_]+)\}\}/,

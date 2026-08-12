@@ -128,6 +128,7 @@ input:focus, select:focus { border-color: #9a7c30; box-shadow: 0 0 0 3px rgba(23
 .title-editor-panel .toastui-editor-ww-container .ProseMirror { min-height: 60px; padding: 14px 17px; font-size: 14px; line-height: 1.35; }
 .title-editor-panel .toastui-editor-ww-container .ProseMirror p { margin: 0; color: var(--ink); font-size: 14px; }
 .editor-panel .toastui-editor-defaultUI { resize: vertical; min-height: 360px; overflow: hidden; border-color: var(--line); border-radius: 10px; background: var(--paper); }
+.editor-panel .title-editor-panel .toastui-editor-defaultUI { min-height: 116px; resize: none; }
 .editor-panel .toastui-editor-toolbar { height: 40px; background: #fbfaf7; }
 .editor-panel .toastui-editor-defaultUI-toolbar { height: 40px; padding: 4px 8px; border-color: var(--line); background: #fbfaf7; }
 .editor-panel .toastui-editor-toolbar-icons { transform: scale(.86); }
