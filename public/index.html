@@ -10,19 +10,41 @@
   <body>
     <header class="app-header">
       <h1>Flying Solo Contract Review</h1>
+      <nav class="workspace-switcher" aria-label="Workspace">
+        <button id="templateWorkspace" class="workspace-switch active" type="button" aria-pressed="true">Templates</button>
+        <button id="batchWorkspace" class="workspace-switch" type="button" aria-pressed="false">Batch review</button>
+      </nav>
     </header>
 
     <main class="workspace">
       <aside class="control-panel">
+        <section id="templateManager" class="template-manager" aria-labelledby="templateManagerTitle">
+          <p class="eyebrow">Prepare reusable wording</p>
+          <h2 id="templateManagerTitle">Templates</h2>
+          <p class="template-manager-copy">Choose a contract type, then create or update a saved template before starting a batch.</p>
+          <label>Contract type<select id="templateSourceSelect" aria-label="Template contract type"></select></label>
+          <label>Saved template<select id="templateSelect" aria-label="Saved template"></select></label>
+          <p id="templateVersion" class="template-version">Loading template…</p>
+          <div class="template-actions">
+            <button id="openTemplateBuilder" class="primary-button" type="button">Open template builder</button>
+          </div>
+          <label class="new-template-label">New template name<input id="newTemplateName" type="text" placeholder="e.g. Paris Fashion Week 2027"></label>
+          <button id="createTemplate" class="secondary-button" type="button">Create template</button>
+          <section class="template-history-section" aria-labelledby="templateHistoryTitle">
+            <h3 id="templateHistoryTitle">Version history</h3>
+            <div id="templateHistory" class="template-history"></div>
+          </section>
+        </section>
+
+        <div id="batchControls" hidden>
         <section class="import-section" aria-labelledby="importTitle">
           <h2 id="importTitle">Start a batch</h2>
           <label>Contract type<select id="contractType" name="contractType"></select></label>
           <label>Excel workbook<input id="workbookFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
           <div class="import-actions">
-            <button id="uploadWorkbook" class="primary-button" type="button">Upload workbook</button>
-            <button id="membershipDemo" class="secondary-button" type="button">Membership demo</button>
+            <button id="uploadWorkbook" class="primary-button" type="button">Start batch</button>
           </div>
-          <p id="importSummary" class="import-summary">Upload the Fashion Week workbook or load mock Membership data.</p>
+          <p id="importSummary" class="import-summary">Choose a saved template. Fashion Week uses a workbook; Membership starts from local mock data.</p>
         </section>
         <section class="review-queue-section" aria-labelledby="reviewQueueTitle">
           <div class="review-queue-header">
@@ -97,6 +119,7 @@
             </section>
           </div>
         </form>
+        </div>
 
         <section id="placeholderLibrary" class="placeholder-library" aria-labelledby="placeholderLibraryTitle" hidden>
           <h3 id="placeholderLibraryTitle">Placeholders</h3>
@@ -108,7 +131,7 @@
       <section class="document-panel">
         <div class="output-bar">
           <div class="title-output">
-            <span class="field-caption">Contract title</span>
+            <span id="titleCaption" class="field-caption">Contract title</span>
             <strong id="contractTitle">Generating…</strong>
           </div>
           <button id="copyTitle" class="secondary-button" type="button">Copy title</button>
@@ -128,6 +151,14 @@
 
         <div id="errorMessage" class="error-message" hidden></div>
         <div id="editorPanel" class="editor-panel" hidden>
+          <section class="title-editor-panel" aria-labelledby="titleEditorTitle">
+            <div>
+              <span class="field-caption">Contract title template</span>
+              <h2 id="titleEditorTitle">Title</h2>
+              <p>Use the same placeholder buttons as the contract body. Conditional title text stays between its two gold markers.</p>
+            </div>
+            <div id="titleWysiwygEditor" aria-label="Contract title editor"></div>
+          </section>
           <div id="wysiwygEditor" aria-label="Contract editor"></div>
           <div id="editorResizeHandle" class="editor-resize-handle" role="separator" aria-label="Resize contract editor" aria-orientation="horizontal"></div>
         </div>

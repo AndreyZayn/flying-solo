@@ -13,7 +13,7 @@ test("preview shows sourced fields without copy actions and hides placeholders",
 });
 
 test("preview locks sourced fields while edit mode unlocks pending and verified records", () => {
-  assert.match(app, /const inputEditable = view === "editor"/);
+  assert.match(app, /const inputEditable = workspaceMode === "batch" && view === "editor"/);
   assert.match(app, /form\.querySelectorAll\("input, select"\)\.forEach\(\(control\) => \{ control\.disabled = !inputEditable; \}\)/);
   assert.match(app, /record\.status = "changes_pending"/);
   assert.match(app, /placeholderLibrary\.hidden = !editorVisible/);

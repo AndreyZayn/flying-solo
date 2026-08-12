@@ -5,6 +5,7 @@
     "family": "fashion-week",
     "templateFile": "templates/fashion-week.md",
     "placeholderRegistryFile": "config/fashion-week-placeholders.json",
+    "titleTemplate": "FLYING SOLO - {{EVENT_CODE}} - {{TITLE_EVENT_MONTH}} - {{BRAND_NAME}}{{#IF GRANT_ENABLED}} - (grant){{/IF}}",
     "requiredHeading": "EVENT AGREEMENT",
     "requiredPlaceholders": [
       "EVENT_CODE",
@@ -23,6 +24,7 @@
     "family": "membership",
     "templateFile": "templates/membership.md",
     "placeholderRegistryFile": "config/membership-placeholders.json",
+    "titleTemplate": "FLYING SOLO - {{MEMBERSHIP_LOCATION}} - {{DURATION}} - {{BRAND}}",
     "requiredHeading": "CONTRACT AGREEMENT",
     "requiredPlaceholders": ["DESIGNER_NAME", "BRAND", "CATEGORY_DISPLAY", "START_DATE", "DURATION", "PRICE", "CANC_DATE"]
   }

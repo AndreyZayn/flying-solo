@@ -79,6 +79,7 @@ batch_id: ${JSON.stringify(contract.batchId)}
 record_id: ${JSON.stringify(contract.recordId)}
 template_id: ${JSON.stringify(contract.templateId)}
 title: ${JSON.stringify(contract.title)}
+title_template: ${JSON.stringify(contract.titleTemplate)}
 verified_at: ${JSON.stringify(contract.verifiedAt)}
 verified_by: ${JSON.stringify(contract.verifiedBy)}
 content_sha256: ${JSON.stringify(contract.contentHash)}
@@ -92,6 +93,7 @@ supersedes_sha256: ${JSON.stringify(contract.supersedesHash ?? null)}
 
 - **status: verified** — Anna reviewed and explicitly approved this contract for the current run.
 - **normalized input** — structured Flying Solo values used to prepare this contract.
+- **reviewed contract title template** — the exact title logic Anna reviewed, including its placeholder syntax.
 - **reviewed template Markdown** — the exact template Anna reviewed, including its placeholder syntax.
 - **verified contract Markdown** — the resolved contract source a SignatureConfirm agent may use to create a draft.
 
@@ -105,6 +107,12 @@ ${JSON.stringify(contract.input, null, 2)}
 
 \`\`\`markdown
 ${contract.templateMarkdown}
+\`\`\`
+
+## Reviewed contract title template
+
+\`\`\`text
+${contract.titleTemplate}
 \`\`\`
 
 ## Verified contract Markdown
@@ -156,18 +164,20 @@ export function createReviewStore({
     });
   }
 
-  async function saveDraft(recordId, { input, draftMarkdown }) {
+  async function saveDraft(recordId, { input, draftMarkdown, draftTitleTemplate }) {
     return locked(async () => {
       const queue = validateQueue(await readJson(queuePath));
       const record = queue.records.find((candidate) => candidate.id === recordId);
       if (!record) throw new Error(`Unknown review record: ${recordId}.`);
-      if (!input || typeof input !== "object" || typeof draftMarkdown !== "string") {
-        throw new Error("Draft requires input and Markdown.");
+      if (!input || typeof input !== "object" || typeof draftMarkdown !== "string" || typeof draftTitleTemplate !== "string") {
+        throw new Error("Draft requires input, a title template, and Markdown.");
       }
       const changed = JSON.stringify(record.input) !== JSON.stringify(input)
-        || record.draftMarkdown !== draftMarkdown;
+        || record.draftMarkdown !== draftMarkdown
+        || record.draftTitleTemplate !== draftTitleTemplate;
       record.input = clone(input);
       record.draftMarkdown = draftMarkdown;
+      record.draftTitleTemplate = draftTitleTemplate;
       if (record.status === "verified" && changed) record.status = "changes_pending";
       record.updatedAt = now();
       await writeJsonAtomic(queuePath, queue);
@@ -181,7 +191,7 @@ export function createReviewStore({
       const record = queue.records.find((candidate) => candidate.id === recordId);
       if (!record) throw new Error(`Unknown review record: ${recordId}.`);
       if (record.status === "verified") throw new Error(`${recordId} is already verified.`);
-      for (const property of ["templateId", "title", "templateMarkdown", "resolvedMarkdown"]) {
+      for (const property of ["templateId", "title", "titleTemplate", "templateMarkdown", "resolvedMarkdown"]) {
         if (!String(completed[property] ?? "").trim()) throw new Error(`Verification requires ${property}.`);
       }
       if (!completed.input || typeof completed.input !== "object") {
@@ -190,7 +200,12 @@ export function createReviewStore({
       if (completed.resolvedMarkdown.includes("{{") || completed.resolvedMarkdown.includes("}}")) {
         throw new Error("Verified contract cannot contain unresolved placeholders.");
       }
-      const contentHash = createHash("sha256").update(completed.resolvedMarkdown, "utf8").digest("hex");
+      const contentHash = createHash("sha256").update(JSON.stringify({
+        title: completed.title,
+        titleTemplate: completed.titleTemplate,
+        templateMarkdown: completed.templateMarkdown,
+        resolvedMarkdown: completed.resolvedMarkdown,
+      }), "utf8").digest("hex");
       const filename = `${pathPart(queue.batch.id)}--${pathPart(record.id)}.md`;
       const verifiedContractPath = path.join(verifiedContractsDirectory, filename);
       let existing;
@@ -207,6 +222,7 @@ export function createReviewStore({
         recordId: record.id,
         templateId: completed.templateId,
         title: completed.title,
+        titleTemplate: completed.titleTemplate,
         input: clone(completed.input),
         templateMarkdown: completed.templateMarkdown,
         resolvedMarkdown: completed.resolvedMarkdown,
@@ -219,6 +235,7 @@ export function createReviewStore({
       if (!recovering) await writeTextAtomic(verifiedContractPath, handoffMarkdown(verifiedContract));
       record.input = clone(completed.input);
       record.draftMarkdown = completed.templateMarkdown;
+      record.draftTitleTemplate = completed.titleTemplate;
       record.status = "verified";
       record.verifiedAt = verifiedAt;
       record.contentHash = contentHash;

@@ -10,7 +10,6 @@ import { importFashionWeekWorkbook } from "./src/workbook-importer.mjs";
 import { normalizeEditorMarkdown, resolveMarkdownTemplate } from "./public/markdown-template.mjs";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const registryPromise = fs.readFile(path.join(rootDir, "config/fashion-week-registry.json"), "utf8").then(JSON.parse);
 const placeholderRegistryPromise = fs.readFile(
   path.join(rootDir, "config/fashion-week-placeholders.json"),
   "utf8",
@@ -84,9 +83,17 @@ async function readJson(request) {
   return JSON.parse((await readBody(request)).toString("utf8") || "{}");
 }
 
-async function generatedContract(input, templateId = "fashion-week", templateStore = defaultTemplateStore) {
+function resolveTitleTemplate(titleTemplate, placeholders) {
+  const resolved = resolveMarkdownTemplate(String(titleTemplate ?? "").trim(), placeholders).trim();
+  if (!resolved) throw new Error("Contract title cannot be empty.");
+  if (/\r|\n/.test(resolved)) throw new Error("Contract title must stay on one line.");
+  return resolved;
+}
+
+async function generatedContract(input, templateId = "fashion-week", templateStore = defaultTemplateStore, requestedTitleTemplate) {
+  const template = templateStore.get ? await templateStore.get(templateId) : { family: templateId };
   const [result, placeholderRegistry] = await Promise.all([
-    buildFamilyContract(templateId, input),
+    buildFamilyContract(template.family ?? templateId, input),
     templateStore.placeholders ? templateStore.placeholders(templateId) : placeholderRegistryPromise,
   ]);
   const definedKeys = new Set(placeholderRegistry.map((placeholder) => placeholder.key));
@@ -96,14 +103,20 @@ async function generatedContract(input, templateId = "fashion-week", templateSto
     ...[...definedKeys].filter((key) => !(key in result.placeholders)),
   ];
   if (mismatch.length) throw new Error(`Placeholder registry mismatch: ${mismatch.join(", ")}.`);
-  return result;
+  const titleTemplate = requestedTitleTemplate ?? template.titleTemplate;
+  return {
+    ...result,
+    title: titleTemplate ? resolveTitleTemplate(titleTemplate, result.placeholders) : result.title,
+    titleTemplate: titleTemplate ?? result.title,
+  };
 }
 
 async function handleRequest(request, response, { reviewStore, templateStore }) {
   const url = new URL(request.url, "http://localhost");
   if (request.method === "GET" && url.pathname === "/api/config") {
     try {
-      return sendJson(response, 200, await familyConfig(url.searchParams.get("templateId") ?? "fashion-week"));
+      const template = await templateStore.get(url.searchParams.get("templateId") ?? "fashion-week");
+      return sendJson(response, 200, await familyConfig(template.family ?? template.id));
     } catch (error) {
       return sendJson(response, 404, { error: error.message });
     }
@@ -123,6 +136,30 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   if (request.method === "GET" && url.pathname === "/api/templates") {
     return sendJson(response, 200, await templateStore.list());
   }
+  if (request.method === "POST" && url.pathname === "/api/templates") {
+    try {
+      return sendJson(response, 201, await templateStore.create(await readJson(request)));
+    } catch (error) {
+      return sendJson(response, 400, { error: error.message });
+    }
+  }
+  const templateHistoryMatch = url.pathname.match(/^\/api\/templates\/([^/]+)\/history$/);
+  if (templateHistoryMatch && request.method === "GET") {
+    try {
+      return sendJson(response, 200, await templateStore.history(decodeURIComponent(templateHistoryMatch[1])));
+    } catch (error) {
+      return sendJson(response, 404, { error: error.message });
+    }
+  }
+  const templateRestoreMatch = url.pathname.match(/^\/api\/templates\/([^/]+)\/restore$/);
+  if (templateRestoreMatch && request.method === "POST") {
+    try {
+      const { version } = await readJson(request);
+      return sendJson(response, 200, await templateStore.restore(decodeURIComponent(templateRestoreMatch[1]), version));
+    } catch (error) {
+      return sendJson(response, 400, { error: error.message });
+    }
+  }
   const templateMatch = url.pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (templateMatch && request.method === "GET") {
     try {
@@ -133,8 +170,7 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   }
   if (templateMatch && request.method === "PUT") {
     try {
-      const { markdown } = await readJson(request);
-      return sendJson(response, 200, await templateStore.save(decodeURIComponent(templateMatch[1]), markdown));
+      return sendJson(response, 200, await templateStore.save(decodeURIComponent(templateMatch[1]), await readJson(request)));
     } catch (error) {
       return sendJson(response, 400, { error: error.message });
     }
@@ -145,20 +181,25 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   if (request.method === "POST" && url.pathname === "/api/import-workbook") {
     try {
       const templateId = url.searchParams.get("templateId") ?? "fashion-week";
-      if (templateId !== "fashion-week") throw new Error("Workbook import is currently configured for Fashion Week files only.");
+      const template = await templateStore.get(templateId);
+      if (template.family !== "fashion-week") throw new Error("Workbook import is currently configured for Fashion Week files only.");
       const fileName = request.headers["x-file-name"] || "upload.xlsx";
       if (!/\.xlsx$/i.test(fileName)) throw new Error("Upload an .xlsx workbook.");
       const queue = await importFashionWeekWorkbook(await readBody(request, 10_000_000), { fileName });
+      queue.batch.templateId = templateId;
       return sendJson(response, 200, await reviewStore.replaceQueue(queue));
     } catch (error) {
       return sendJson(response, 400, { error: error.message });
     }
   }
   if (request.method === "POST" && url.pathname === "/api/demo/membership") {
+    const templateId = url.searchParams.get("templateId") ?? "membership";
+    const template = await templateStore.get(templateId);
+    if (template.family !== "membership") return sendJson(response, 400, { error: "Membership demo requires a Membership template." });
     const importedAt = new Date().toISOString();
     const queue = {
       schemaVersion: 1,
-      batch: { id: `membership-demo-${importedAt.replace(/[^0-9]/g, "").slice(0, 14)}`, label: "Membership template demo", templateId: "membership", importedAt, source: { type: "local-demo", note: "Mock data only" } },
+      batch: { id: `membership-demo-${importedAt.replace(/[^0-9]/g, "").slice(0, 14)}`, label: "Membership template demo", templateId, importedAt, source: { type: "local-demo", note: "Mock data only" } },
       records: [{ id: "mock-membership-brand", status: "pending", sourceRow: null, importIssues: [], draftMarkdown: null, verifiedAt: null, input: { brand: "Mock Membership Brand", representative: "Mock Representative", recipientEmail: "mock@example.com", packageId: "clothing-store-pr", durationMonths: 6, startDate: "2026-09-01" } }],
     };
     return sendJson(response, 200, await reviewStore.replaceQueue(queue));
@@ -177,14 +218,15 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   const verifyMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/verify$/);
   if (verifyMatch && request.method === "POST") {
     try {
-      const { input, templateMarkdown, templateId = "fashion-week" } = await readJson(request);
-      const result = await generatedContract(input, templateId, templateStore);
+      const { input, templateMarkdown, templateId = "fashion-week", titleTemplate } = await readJson(request);
+      const result = await generatedContract(input, templateId, templateStore, titleTemplate);
       const normalizedTemplate = normalizeEditorMarkdown(templateMarkdown);
       const resolvedMarkdown = resolveMarkdownTemplate(normalizedTemplate, result.placeholders);
       return sendJson(response, 200, await reviewStore.verify(decodeURIComponent(verifyMatch[1]), {
         input,
         templateId,
         title: result.title,
+        titleTemplate: result.titleTemplate,
         templateMarkdown: normalizedTemplate,
         resolvedMarkdown,
       }));
@@ -196,7 +238,7 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
     try {
       const body = await readJson(request);
       const templateId = body.templateId ?? "fashion-week";
-      return sendJson(response, 200, await generatedContract(body.input ?? body, templateId, templateStore));
+      return sendJson(response, 200, await generatedContract(body.input ?? body, templateId, templateStore, body.titleTemplate));
     } catch (error) {
       return sendJson(response, 400, { error: error.message });
     }

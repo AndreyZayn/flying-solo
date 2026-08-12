@@ -1,13 +1,14 @@
 [
-  { "key": "DESIGNER_NAME", "label": "Representative name", "description": "The person representing the brand.", "type": "value", "group": "Identity" },
-  { "key": "BRAND", "label": "Brand", "description": "The membership brand.", "type": "value", "group": "Identity" },
-  { "key": "CATEGORY_DISPLAY", "label": "Category", "description": "The approved category and size when required.", "type": "value", "group": "Membership" },
-  { "key": "START_DATE", "label": "Start date", "description": "The first day of the membership term.", "type": "value", "group": "Membership" },
-  { "key": "DURATION", "label": "Duration", "description": "The approved whole-month initial term.", "type": "value", "group": "Membership" },
-  { "key": "PRICE", "label": "Monthly fee", "description": "The catalog-approved monthly membership fee.", "type": "value", "group": "Membership" },
-  { "key": "CANC_DATE", "label": "Cancellation deadline", "description": "The derived cancellation notice deadline.", "type": "value", "group": "Membership" },
+  { "key": "DESIGNER_NAME", "label": "Representative name", "description": "The person representing the brand.", "type": "value", "group": "People and brand" },
+  { "key": "BRAND", "label": "Brand", "description": "The membership brand.", "type": "value", "group": "People and brand" },
+  { "key": "MEMBERSHIP_LOCATION", "label": "Membership location", "description": "The Flying Solo location used in the contract title.", "type": "value", "group": "Contract title" },
+  { "key": "CATEGORY_DISPLAY", "label": "Category", "description": "The approved category and size when required.", "type": "value", "group": "Membership details" },
+  { "key": "START_DATE", "label": "Start date", "description": "The first day of the membership term.", "type": "value", "group": "Membership details" },
+  { "key": "DURATION", "label": "Duration", "description": "The approved whole-month initial term.", "type": "value", "group": "Membership details" },
+  { "key": "PRICE", "label": "Monthly fee", "description": "The catalog-approved monthly membership fee.", "type": "value", "group": "Membership details" },
+  { "key": "CANC_DATE", "label": "Cancellation deadline", "description": "The derived cancellation notice deadline.", "type": "value", "group": "Membership details" },
   { "key": "BENEFIT_LABEL", "label": "Duration benefit", "description": "The catalog benefit for the selected duration.", "type": "value", "group": "Services" },
-  { "key": "NY_STORE_ENABLED", "label": "NY Store service", "description": "Includes NY Store when active in the package.", "type": "condition", "group": "Services" },
-  { "key": "PR_ENABLED", "label": "PR service", "description": "Includes PR when active in the package.", "type": "condition", "group": "Services" },
-  { "key": "BENEFIT_ENABLED", "label": "Duration benefit", "description": "Includes the duration benefit when one is configured.", "type": "condition", "group": "Services" }
+  { "key": "NY_STORE_ENABLED", "label": "NY Store service", "description": "Includes NY Store when active in the package.", "type": "condition", "group": "Show only when" },
+  { "key": "PR_ENABLED", "label": "PR service", "description": "Includes PR when active in the package.", "type": "condition", "group": "Show only when" },
+  { "key": "BENEFIT_ENABLED", "label": "Duration benefit", "description": "Includes the duration benefit when one is configured.", "type": "condition", "group": "Show only when" }
 ]

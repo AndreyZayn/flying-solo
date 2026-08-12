@@ -20,6 +20,7 @@ const seededQueue = {
     status: "pending",
     input: { brand: "Example Brand", representative: "Example Person" },
     draftMarkdown: null,
+    draftTitleTemplate: null,
     verifiedAt: null,
   }],
 };
@@ -59,10 +60,12 @@ test("persists record-specific field and editor drafts", async () => {
   await store.saveDraft("brand-1", {
     input: { brand: "Edited Brand", representative: "Edited Person" },
     draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
+    draftTitleTemplate: "Agreement — {{BRAND_NAME}}",
   });
   const record = (await store.getQueue()).records[0];
   assert.equal(record.input.brand, "Edited Brand");
   assert.match(record.draftMarkdown, /\{\{BRAND_NAME\}\}/);
+  assert.equal(record.draftTitleTemplate, "Agreement — {{BRAND_NAME}}");
   assert.equal(record.updatedAt, "2026-08-10T12:00:00.000Z");
 });
 
@@ -85,6 +88,7 @@ test("verifies once, writes an exact Markdown handoff file, and completes the ba
   const result = await store.verify("brand-1", {
     templateId: "fashion-week",
     title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
     input: { brand: "Example Brand", representative: "Example Person" },
     templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
     resolvedMarkdown,
@@ -96,10 +100,12 @@ test("verifies once, writes an exact Markdown handoff file, and completes the ba
   const handoff = await fs.readFile(contractPath, "utf8");
   assert.match(handoff, /^---\nschema_version: 1\nstatus: verified\ncontract_id: "batch-1:brand-1"/);
   assert.match(handoff, /template_id: "fashion-week"/);
+  assert.match(handoff, /title_template: "FLYING SOLO - \{\{BRAND_NAME\}\}"/);
   assert.match(handoff, /content_sha256: "[a-f0-9]{64}"/);
   assert.match(handoff, /## Definitions/);
   assert.match(handoff, /## Normalized input/);
   assert.match(handoff, /## Reviewed template Markdown/);
+  assert.match(handoff, /## Reviewed contract title template/);
   assert.match(handoff, /## Verified contract Markdown/);
   assert.match(handoff, new RegExp(resolvedMarkdown));
   assert.equal(await fs.access(archivePath).then(() => true, () => false), false);
@@ -107,6 +113,7 @@ test("verifies once, writes an exact Markdown handoff file, and completes the ba
     store.verify("brand-1", {
       templateId: "fashion-week",
       title: "Duplicate",
+      titleTemplate: "Duplicate",
       input: {},
       templateMarkdown: "duplicate",
       resolvedMarkdown: "duplicate",
@@ -120,6 +127,7 @@ test("editing a verified contract marks its saved draft for reverification", asy
   await store.verify("brand-1", {
     templateId: "fashion-week",
     title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
     input: { brand: "Example Brand", representative: "Example Person" },
     templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
     resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand",
@@ -128,6 +136,7 @@ test("editing a verified contract marks its saved draft for reverification", asy
   const draft = await store.saveDraft("brand-1", {
     input: { brand: "Example Brand Revised", representative: "Example Person" },
     draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}} revised",
+    draftTitleTemplate: "FLYING SOLO - {{BRAND_NAME}} revised",
   });
 
   assert.equal(draft.status, "changes_pending");
@@ -145,6 +154,7 @@ test("reverification atomically replaces one canonical handoff and records its r
   const first = await store.verify("brand-1", {
     templateId: "fashion-week",
     title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
     input: { brand: "Example Brand", representative: "Example Person" },
     templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
     resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand",
@@ -152,10 +162,12 @@ test("reverification atomically replaces one canonical handoff and records its r
   await store.saveDraft("brand-1", {
     input: { brand: "Example Brand Revised", representative: "Example Person" },
     draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}} revised",
+    draftTitleTemplate: "FLYING SOLO - {{BRAND_NAME}} revised",
   });
   const revised = await store.verify("brand-1", {
     templateId: "fashion-week",
     title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand Revised",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}} revised",
     input: { brand: "Example Brand Revised", representative: "Example Person" },
     templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}} revised",
     resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand Revised revised",
@@ -175,6 +187,7 @@ test("an identical retry recovers queue state without creating another revision"
   const completed = {
     templateId: "fashion-week",
     title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
     input: { brand: "Example Brand", representative: "Example Person" },
     templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
     resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand",

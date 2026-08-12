@@ -60,6 +60,12 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /id="reviewProgress"/);
   assert.match(pageHtml, /id="verifyContract"[^>]*>Mark verified<\/button>/);
   assert.match(pageHtml, /id="saveTemplate"[^>]*>Save template<\/button>/);
+  assert.match(pageHtml, /id="templateWorkspace"/);
+  assert.match(pageHtml, /id="templateSelect"/);
+  assert.match(pageHtml, /id="createTemplate"[^>]*>Create template<\/button>/);
+  assert.match(pageHtml, /id="templateHistory"/);
+  assert.match(pageHtml, /id="titleWysiwygEditor"[^>]+aria-label="Contract title editor"/);
+  assert.doesNotMatch(pageHtml, /id="membershipDemo"/);
   assert.match(pageHtml, /aria-label="Payment 1 due date"/);
   assert.match(pageHtml, /aria-label="Payment 1 amount"/);
   assert.match(pageHtml, /aria-label="Payment 2 due date"/);
@@ -97,7 +103,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.equal(config.categories[0].fullPrice, 6900);
 
   const placeholderRegistry = await fetch(`${baseUrl}/api/placeholders`).then((response) => response.json());
-  assert.equal(placeholderRegistry.length, 18);
+  assert.equal(placeholderRegistry.length, 19);
   assert.deepEqual(
     placeholderRegistry.find((placeholder) => placeholder.key === "BRAND_NAME"),
     {
@@ -105,7 +111,7 @@ test("serves the dashboard and registry", async (context) => {
       label: "Brand name",
       description: "The participating brand named in the agreement.",
       type: "value",
-      group: "Contract details",
+      group: "People and brand",
     },
   );
   assert.equal(
@@ -138,6 +144,9 @@ test("serves the dashboard and registry", async (context) => {
 
   const appSource = await fetch(`${baseUrl}/app.js`).then((response) => response.text());
   assert.match(appSource, /new toastui\.Editor\(/);
+  assert.match(appSource, /titleEditor/);
+  assert.match(appSource, /templateWorkspaceButton\.addEventListener/);
+  assert.match(appSource, /\/api\/templates\/\$\{encodeURIComponent\(activeTemplateId\)\}\/history/);
   assert.match(appSource, /from "\/editor-sizing\.mjs"/);
   assert.match(appSource, /from "\/placeholder-library\.mjs"/);
   assert.match(appSource, /from "\/review-selector\.mjs"/);
@@ -150,7 +159,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(appSource, /\/api\/review-queue\/\$\{encodeURIComponent\(record\.id\)\}\/verify/);
   assert.match(appSource, /async function verifyCurrentContract\(\)[\s\S]*?await saveCurrentDraft\(\);[\s\S]*?await generate\(\);/);
   assert.match(appSource, /\/api\/templates\/\$\{encodeURIComponent\(activeTemplateId\)\}/);
-  assert.match(appSource, /contractEditor\.insertText\(placeholderInsertionText\(placeholder\)\)/);
+  assert.match(appSource, /target\.insertText\(placeholderInsertionText\(placeholder, \{ inline: activeEditor === "title" \}\)\)/);
   assert.match(appSource, /displayPlaceholderValue\(placeholder, currentResult\?\.placeholders/);
   assert.match(appSource, /matchesPlaceholder\(placeholder, placeholderSearch\.value\)/);
   assert.match(appSource, /contractEditor\.setHeight\(/);
@@ -214,6 +223,7 @@ test("generates title and Markdown placeholders through the local API", async (c
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      titleTemplate: "Agreement for {{BRAND_NAME}}{{#IF GRANT_ENABLED}} · grant{{/IF}}",
       eventCode: "PFW",
       eventMonth: "February 2027",
       brand: "Example Brand",
@@ -230,7 +240,7 @@ test("generates title and Markdown placeholders through the local API", async (c
   });
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.equal(result.title, "FLYING SOLO - PFW - Feb 2027 - Example Brand - (grant)");
+  assert.equal(result.title, "Agreement for Example Brand · grant");
   assert.equal(result.placeholders.FULL_PRICE, "$6,900");
   assert.equal(result.placeholders.GRANT_AMOUNT, "$2,000");
   assert.equal(result.placeholders.REMAINING_BALANCE, "$4,900");
@@ -285,7 +295,11 @@ test("persists review drafts and verifies the exact resolved contract through th
   const draftResponse = await fetch(`${baseUrl}/api/review-queue/brand-1/draft`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ input, draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n" }),
+    body: JSON.stringify({
+      input,
+      draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n",
+      draftTitleTemplate: "Agreement — {{BRAND_NAME}}",
+    }),
   });
   assert.equal(draftResponse.status, 200);
   assert.equal(savedDraft.id, "brand-1");
@@ -293,10 +307,17 @@ test("persists review drafts and verifies the exact resolved contract through th
   const verifyResponse = await fetch(`${baseUrl}/api/review-queue/brand-1/verify`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ input, templateId: "fashion-week", templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n" }),
+    body: JSON.stringify({
+      input,
+      templateId: "fashion-week",
+      templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n",
+      titleTemplate: "Agreement — {{BRAND_NAME}}",
+    }),
   });
   assert.equal(verifyResponse.status, 200);
   assert.equal(verified.id, "brand-1");
   assert.equal(verified.templateMarkdown, "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n");
+  assert.equal(verified.title, "Agreement — Example Brand");
+  assert.equal(verified.titleTemplate, "Agreement — {{BRAND_NAME}}");
   assert.equal(verified.resolvedMarkdown, "## EVENT AGREEMENT\n\nExample Brand\n");
 });
