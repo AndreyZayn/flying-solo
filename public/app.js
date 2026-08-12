@@ -43,6 +43,7 @@ const templateHistory = document.querySelector("#templateHistory");
 const newTemplateName = document.querySelector("#newTemplateName");
 const createTemplateButton = document.querySelector("#createTemplate");
 const openTemplateBuilderButton = document.querySelector("#openTemplateBuilder");
+const deleteTemplateButton = document.querySelector("#deleteTemplate");
 const placeholderSearch = document.querySelector("#placeholderSearch");
 const placeholderList = document.querySelector("#placeholderList");
 const reviewQueueSelect = document.querySelector("#reviewQueueSelect");
@@ -233,7 +234,9 @@ function setWorkspace(mode) {
   batchWorkspaceButton.setAttribute("aria-pressed", String(!templates));
   titleCaption.textContent = templates ? "Contract title template" : "Contract title";
   editorTab.textContent = templates ? "Template editor" : "Edit contract";
-  previewTab.hidden = templates;
+  previewTab.textContent = templates ? "Preview template" : "Preview";
+  previewTab.hidden = false;
+  previewTab.disabled = !templates && !currentResult;
   copyMarkdownButton.hidden = templates;
   verifyContractButton.hidden = templates;
   if (templates) view = "editor";
@@ -244,6 +247,7 @@ function renderTemplateVersion(template) {
   templateVersion.textContent = template
     ? `${template.builtIn ? "Standard" : "Custom"} template · Version ${template.version}`
     : "No template selected.";
+  deleteTemplateButton.hidden = !template || template.builtIn;
 }
 
 async function renderTemplateHistory() {
@@ -302,6 +306,7 @@ async function loadTemplate(templateId, { loadRecord = false } = {}) {
   renderTemplateVersion(template);
   renderPlaceholderLibrary();
   await renderTemplateHistory();
+  if (workspaceMode === "templates" && view === "preview") showResult();
   if (loadRecord && selectedRecord()) await selectRecord(selectedRecord().id, { savePrevious: false });
 }
 
@@ -499,7 +504,7 @@ function renderTemplatePreview() {
 function showResult() {
   if (workspaceMode === "templates") titleElement.textContent = activeTitleTemplate();
   if (currentResult && workspaceMode === "batch") titleElement.textContent = currentResult.title;
-  const editorVisible = workspaceMode === "templates" || view === "editor";
+  const editorVisible = view === "editor";
   placeholderLibrary.hidden = !editorVisible;
   editorPanel.hidden = !editorVisible;
   previewPanel.hidden = editorVisible;
@@ -516,7 +521,7 @@ function showResult() {
     return;
   }
   try {
-    renderPreview();
+    workspaceMode === "templates" ? renderTemplatePreview() : renderPreview();
   } catch (error) {
     showError(error);
   }
@@ -649,6 +654,25 @@ async function restoreTemplate(version) {
   templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
   await loadTemplate(template.id);
   showToast(`Restored version ${version} as version ${template.version}`);
+}
+
+async function deleteActiveTemplate() {
+  const template = activeTemplate();
+  if (!template || template.builtIn) throw new Error("Built-in templates cannot be deleted.");
+  const confirmed = window.confirm(
+    `Delete “${template.label}”? Its saved versions will be permanently removed.`,
+  );
+  if (!confirmed) return;
+  const response = await fetch(`/api/templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Unable to delete the template.");
+  templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
+  const replacement = templateCatalog.find((candidate) => candidate.family === template.family && candidate.builtIn);
+  if (!replacement) throw new Error("No supported template is available for this contract type.");
+  activeTemplateId = replacement.id;
+  await loadTemplate(replacement.id);
+  setWorkspace("templates");
+  showToast(`${result.label} deleted`);
 }
 
 async function verifyCurrentContract() {
@@ -982,6 +1006,7 @@ async function initialize() {
   openTemplateBuilderButton.addEventListener("click", () => loadTemplate(templateSelect.value)
     .then(() => setWorkspace("templates")).catch(showError));
   createTemplateButton.addEventListener("click", () => createTemplate().catch(showError));
+  deleteTemplateButton.addEventListener("click", () => deleteActiveTemplate().catch(showError));
   document.querySelector("#wysiwygEditor").addEventListener("focusin", () => { activeEditor = "body"; });
   document.querySelector("#titleWysiwygEditor").addEventListener("focusin", () => { activeEditor = "title"; });
   titleEditor.on("change", () => {

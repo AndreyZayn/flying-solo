@@ -330,5 +330,26 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     return save(templateId, snapshot);
   }
 
-  return { list, get, save, create, history, restore, placeholders, definition };
+  async function remove(templateId) {
+    return locked(async () => {
+      const template = await definition(templateId);
+      if (template.builtIn) throw new Error("Built-in templates cannot be deleted.");
+      if (template.templateFile !== `data/runtime/templates/${template.id}.md`) {
+        throw new Error("Custom template storage path is invalid.");
+      }
+      const library = await state();
+      const nextTemplates = library.customTemplates.filter((candidate) => candidate.id !== template.id);
+      if (nextTemplates.length === library.customTemplates.length) {
+        throw new Error(`Unknown contract template: ${templateId}.`);
+      }
+      await writeJsonAtomic(statePath, { ...library, customTemplates: nextTemplates });
+      await Promise.all([
+        fs.rm(safePath(rootDir, template.templateFile), { force: true }),
+        fs.rm(safePath(rootDir, historyDirectory(template)), { force: true, recursive: true }),
+      ]);
+      return { id: template.id, label: template.label, deleted: true };
+    });
+  }
+
+  return { list, get, save, create, history, restore, remove, placeholders, definition };
 }

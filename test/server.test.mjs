@@ -27,6 +27,43 @@ async function startServer() {
   return { server, baseUrl: `http://127.0.0.1:${port}` };
 }
 
+test("deletes an unused custom template but protects a template used by the active batch", async (context) => {
+  let activeTemplateId = "fashion-week";
+  const deleted = [];
+  const reviewStore = {
+    initialize: async () => {},
+    getQueue: async () => ({ batch: { templateId: activeTemplateId }, records: [] }),
+  };
+  const templateStore = {
+    remove: async (id) => {
+      deleted.push(id);
+      return { id, label: "Paris Fashion Week 2027", deleted: true };
+    },
+  };
+  const server = createAppServer({ reviewStore, templateStore });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  context.after(() => server.close());
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const deletedResponse = await fetch(`${baseUrl}/api/templates/paris-fashion-week-2027`, { method: "DELETE" });
+  assert.equal(deletedResponse.status, 200);
+  assert.deepEqual(await deletedResponse.json(), {
+    id: "paris-fashion-week-2027",
+    label: "Paris Fashion Week 2027",
+    deleted: true,
+  });
+
+  activeTemplateId = "paris-fashion-week-2027";
+  const activeResponse = await fetch(`${baseUrl}/api/templates/paris-fashion-week-2027`, { method: "DELETE" });
+  assert.equal(activeResponse.status, 409);
+  assert.match((await activeResponse.json()).error, /active batch/);
+  assert.deepEqual(deleted, ["paris-fashion-week-2027"]);
+});
+
 test("serves the dashboard and registry", async (context) => {
   const { server, baseUrl } = await startServer();
   context.after(() => server.close());
@@ -50,7 +87,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /id="editorResizeHandle"[^>]+role="separator"[^>]+aria-label="Resize contract editor"/);
   assert.match(pageHtml, /id="editorPanel"[^>]+hidden/);
   assert.match(pageHtml, /id="previewPanel">/);
-  assert.match(pageHtml, /id="previewTab"[^>]+class="tab active"[^>]+disabled[^>]*>Preview<\/button>/);
+  assert.match(pageHtml, /id="previewTab"[^>]+class="tab active"[^>]*>Preview<\/button>/);
   assert.match(pageHtml, /id="editorTab"[^>]*>Edit contract<\/button>/);
   assert.match(pageHtml, /id="copyMarkdown"[^>]+disabled[^>]*>Copy Markdown<\/button>/);
   assert.match(pageHtml, /id="reviewQueueSelect"[^>]+aria-label="Select a contract"/);
@@ -64,6 +101,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /id="templateSelect"/);
   assert.match(pageHtml, /id="createTemplate"[^>]*>Create template<\/button>/);
   assert.match(pageHtml, /id="templateHistory"/);
+  assert.match(pageHtml, /id="deleteTemplate"[^>]*>Delete template<\/button>/);
   assert.match(pageHtml, /id="titleWysiwygEditor"[^>]+aria-label="Contract title editor"/);
   assert.doesNotMatch(pageHtml, /id="membershipDemo"/);
   assert.match(pageHtml, /aria-label="Payment 1 due date"/);
@@ -159,6 +197,8 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(appSource, /\/api\/review-queue\/\$\{encodeURIComponent\(record\.id\)\}\/verify/);
   assert.match(appSource, /async function verifyCurrentContract\(\)[\s\S]*?await saveCurrentDraft\(\);[\s\S]*?await generate\(\);/);
   assert.match(appSource, /\/api\/templates\/\$\{encodeURIComponent\(activeTemplateId\)\}/);
+  assert.match(appSource, /method: "DELETE"/);
+  assert.match(appSource, /renderTemplatePreview\(\)/);
   assert.match(appSource, /target\.insertText\(placeholderInsertionText\(placeholder, \{ inline: activeEditor === "title" \}\)\)/);
   assert.match(appSource, /displayPlaceholderValue\(placeholder, currentResult\?\.placeholders/);
   assert.match(appSource, /matchesPlaceholder\(placeholder, placeholderSearch\.value\)/);

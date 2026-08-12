@@ -175,6 +175,18 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
       return sendJson(response, 400, { error: error.message });
     }
   }
+  if (templateMatch && request.method === "DELETE") {
+    try {
+      const templateId = decodeURIComponent(templateMatch[1]);
+      const queue = await reviewStore.getQueue();
+      if (queue.batch?.templateId === templateId) {
+        return sendJson(response, 409, { error: "This template is used by the active batch and cannot be deleted." });
+      }
+      return sendJson(response, 200, await templateStore.remove(templateId));
+    } catch (error) {
+      return sendJson(response, /Unknown contract template/.test(error.message) ? 404 : 400, { error: error.message });
+    }
+  }
   if (request.method === "GET" && url.pathname === "/api/review-queue") {
     return sendJson(response, 200, await reviewStore.getQueue());
   }

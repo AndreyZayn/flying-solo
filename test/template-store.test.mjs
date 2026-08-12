@@ -94,6 +94,50 @@ test("creates a named reusable template from a supported contract type", async (
   ]);
 });
 
+test("deletes a custom template while preserving approved contract types", async () => {
+  const { rootDir, store } = await fixture();
+  const created = await store.create({
+    sourceTemplateId: "fashion-week",
+    label: "Paris Fashion Week 2027",
+  });
+  await store.save(created.id, {
+    markdown: "## EVENT AGREEMENT\n\nUpdated {{BRAND_NAME}}\n",
+    titleTemplate: "Paris — {{BRAND_NAME}}",
+  });
+
+  await assert.rejects(store.remove("fashion-week"), /Built-in templates cannot be deleted/);
+  assert.deepEqual(await store.remove(created.id), {
+    id: created.id,
+    label: created.label,
+    deleted: true,
+  });
+  assert.deepEqual(await store.list(), [{
+    id: "fashion-week",
+    label: "Fashion Week Agreement",
+    family: "fashion-week",
+    version: 1,
+    builtIn: true,
+  }]);
+  await assert.rejects(store.get(created.id), /Unknown contract template/);
+  await assert.rejects(fs.access(path.join(rootDir, "data/runtime/templates/paris-fashion-week-2027.md")));
+  await assert.rejects(fs.access(path.join(rootDir, "data/runtime/templates/history/paris-fashion-week-2027")));
+});
+
+test("refuses a delete when custom template storage is not in its runtime directory", async () => {
+  const { rootDir, store } = await fixture();
+  const created = await store.create({
+    sourceTemplateId: "fashion-week",
+    label: "Paris Fashion Week 2027",
+  });
+  const statePath = path.join(rootDir, "runtime", "template-library.json");
+  const library = JSON.parse(await fs.readFile(statePath, "utf8"));
+  library.customTemplates[0].templateFile = "config/templates.json";
+  await fs.writeFile(statePath, JSON.stringify(library));
+
+  await assert.rejects(store.remove(created.id), /Custom template storage path is invalid/);
+  assert.match(await fs.readFile(path.join(rootDir, "config/templates.json"), "utf8"), /fashion-week/);
+});
+
 test("keeps earlier Markdown snapshots visible as numbered versions", async () => {
   const { rootDir, store } = await fixture();
   await fs.mkdir(path.join(rootDir, "templates/history/fashion-week"), { recursive: true });
