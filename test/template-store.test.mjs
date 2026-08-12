@@ -94,6 +94,33 @@ test("creates a named reusable template from a supported contract type", async (
   ]);
 });
 
+test("creates a new template by duplicating the selected saved template", async () => {
+  const { store } = await fixture();
+  const source = await store.create({
+    sourceTemplateId: "fashion-week",
+    label: "Paris Fashion Week 2027",
+  });
+  await store.save(source.id, {
+    markdown: "## EVENT AGREEMENT\n\nCustom wording for {{BRAND_NAME}}\n",
+    titleTemplate: "Paris — {{BRAND_NAME}}",
+  });
+
+  const copy = await store.create({
+    sourceTemplateId: source.id,
+    label: "Paris Fashion Week 2028",
+  });
+
+  assert.deepEqual(copy, {
+    id: "paris-fashion-week-2028",
+    label: "Paris Fashion Week 2028",
+    family: "fashion-week",
+    version: 1,
+    builtIn: false,
+    markdown: "## EVENT AGREEMENT\n\nCustom wording for {{BRAND_NAME}}\n",
+    titleTemplate: "Paris — {{BRAND_NAME}}",
+  });
+});
+
 test("deletes a custom template while preserving approved contract types", async () => {
   const { rootDir, store } = await fixture();
   const created = await store.create({

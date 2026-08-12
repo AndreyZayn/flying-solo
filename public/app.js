@@ -35,8 +35,8 @@ const copyMarkdownButton = document.querySelector("#copyMarkdown");
 const toast = document.querySelector("#toast");
 const templateWorkspaceButton = document.querySelector("#templateWorkspace");
 const batchWorkspaceButton = document.querySelector("#batchWorkspace");
+const templateManager = document.querySelector("#templateManager");
 const batchControls = document.querySelector("#batchControls");
-const templateSourceSelect = document.querySelector("#templateSourceSelect");
 const templateSelect = document.querySelector("#templateSelect");
 const templateVersion = document.querySelector("#templateVersion");
 const templateHistory = document.querySelector("#templateHistory");
@@ -53,7 +53,7 @@ const reviewProgress = document.querySelector("#reviewProgress");
 const batchComplete = document.querySelector("#batchComplete");
 const verifyContractButton = document.querySelector("#verifyContract");
 const saveTemplateButton = document.querySelector("#saveTemplate");
-const contractTypeSelect = document.querySelector("#contractType");
+const batchTemplateSelect = document.querySelector("#batchTemplateSelect");
 const workbookFile = document.querySelector("#workbookFile");
 const uploadWorkbookButton = document.querySelector("#uploadWorkbook");
 const importSummary = document.querySelector("#importSummary");
@@ -204,29 +204,22 @@ function activeFamily() {
 }
 
 function renderTemplateSelects() {
-  const builtIns = templateCatalog.filter((template) => template.builtIn);
-  const activeFamily = activeTemplate()?.family ?? builtIns[0]?.family;
-  templateSourceSelect.innerHTML = builtIns.map((template) =>
-    `<option value="${template.id}">${template.label}</option>`
-  ).join("");
-  const selectedSource = builtIns.find((template) => template.family === activeFamily) ?? builtIns[0];
-  templateSourceSelect.value = selectedSource?.id ?? "";
-  const choices = templateCatalog.filter((template) => template.family === selectedSource?.family);
-  templateSelect.innerHTML = choices.map((template) =>
+  templateSelect.innerHTML = templateCatalog.map((template) =>
     `<option value="${template.id}">${template.label}${template.builtIn ? "" : " · custom"}</option>`
   ).join("");
-  templateSelect.value = choices.some((template) => template.id === activeTemplateId)
+  templateSelect.value = templateCatalog.some((template) => template.id === activeTemplateId)
     ? activeTemplateId
-    : choices[0]?.id ?? "";
-  contractTypeSelect.innerHTML = templateCatalog.map((template) =>
+    : templateCatalog[0]?.id ?? "";
+  batchTemplateSelect.innerHTML = templateCatalog.map((template) =>
     `<option value="${template.id}">${template.label}${template.builtIn ? "" : " · custom"}</option>`
   ).join("");
-  contractTypeSelect.value = activeTemplateId;
+  batchTemplateSelect.value = activeTemplateId;
 }
 
 function setWorkspace(mode) {
   workspaceMode = mode;
   const templates = mode === "templates";
+  templateManager.hidden = !templates;
   batchControls.hidden = templates;
   templateWorkspaceButton.classList.toggle("active", templates);
   batchWorkspaceButton.classList.toggle("active", !templates);
@@ -629,7 +622,7 @@ async function createTemplate() {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      sourceTemplateId: templateSourceSelect.value,
+      sourceTemplateId: activeTemplateId,
       label: newTemplateName.value,
     }),
   });
@@ -668,7 +661,7 @@ async function deleteActiveTemplate() {
   if (!response.ok) throw new Error(result.error || "Unable to delete the template.");
   templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
   const replacement = templateCatalog.find((candidate) => candidate.family === template.family && candidate.builtIn);
-  if (!replacement) throw new Error("No supported template is available for this contract type.");
+  if (!replacement) throw new Error("No standard template is available for this agreement.");
   activeTemplateId = replacement.id;
   await loadTemplate(replacement.id);
   setWorkspace("templates");
@@ -997,11 +990,6 @@ async function initialize() {
       showError(error);
     }
   });
-  templateSourceSelect.addEventListener("change", () => {
-    const source = templateCatalog.find((template) => template.id === templateSourceSelect.value);
-    const next = templateCatalog.find((template) => template.family === source?.family);
-    if (next) loadTemplate(next.id).catch(showError);
-  });
   templateSelect.addEventListener("change", () => loadTemplate(templateSelect.value).catch(showError));
   openTemplateBuilderButton.addEventListener("click", () => loadTemplate(templateSelect.value)
     .then(() => setWorkspace("templates")).catch(showError));
@@ -1023,7 +1011,6 @@ async function initialize() {
 initialize().catch(showError);
 
 function configureFamilyControls() {
-  contractTypeSelect.value = activeTemplateId;
   if (activeFamily() === "fashion-week") {
     eventSelect.innerHTML = registry.events.map((event) => `<option value="${event.code}">${event.code} · ${event.label}</option>`).join("");
     categorySelect.innerHTML = registry.categories.map((category) => `<option value="${category.id}">${category.label}</option>`).join("");
@@ -1045,7 +1032,7 @@ async function activateQueue(queue) {
 }
 
 async function uploadWorkbook() {
-  const selectedTemplate = templateCatalog.find((template) => template.id === contractTypeSelect.value);
+  const selectedTemplate = templateCatalog.find((template) => template.id === batchTemplateSelect.value);
   if (!selectedTemplate) throw new Error("Choose a saved template first.");
   if (selectedTemplate.family === "membership") {
     await loadMembershipDemo(selectedTemplate.id);
@@ -1056,7 +1043,7 @@ async function uploadWorkbook() {
   uploadWorkbookButton.disabled = true;
   importSummary.textContent = `Importing ${file.name}…`;
   try {
-    const response = await fetch(`/api/import-workbook?templateId=${encodeURIComponent(contractTypeSelect.value)}`, { method: "POST", headers: { "content-type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": file.name }, body: file });
+    const response = await fetch(`/api/import-workbook?templateId=${encodeURIComponent(batchTemplateSelect.value)}`, { method: "POST", headers: { "content-type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": file.name }, body: file });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "Unable to import workbook.");
     const attention = body.records.filter((record) => record.importIssues?.length).length;

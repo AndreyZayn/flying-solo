@@ -164,7 +164,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     const custom = library.customTemplates.find((candidate) => candidate.id === templateId);
     if (!custom) throw new Error(`Unknown contract template: ${templateId}.`);
     const source = registered.find((candidate) => candidate.id === custom.sourceTemplateId);
-    if (!source) throw new Error(`Custom template ${templateId} has an unsupported contract type.`);
+    if (!source) throw new Error(`Custom template ${templateId} has an unsupported source template.`);
     return {
       ...source,
       ...custom,
@@ -301,7 +301,6 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
   async function create({ sourceTemplateId, label }) {
     return locked(async () => {
       const source = await definition(sourceTemplateId);
-      if (!source.builtIn) throw new Error("Start a new template from a supported contract type.");
       const normalizedLabel = String(label ?? "").trim();
       if (!normalizedLabel) throw new Error("Name the new template before creating it.");
       const [library, existing] = await Promise.all([state(), list()]);
@@ -311,7 +310,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       library.customTemplates.push({
         id,
         label: normalizedLabel,
-        sourceTemplateId: source.id,
+        sourceTemplateId: source.builtIn ? source.id : source.sourceTemplateId,
         templateFile,
         titleTemplate: source.titleTemplate,
         version: 1,

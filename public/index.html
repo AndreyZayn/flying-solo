@@ -21,16 +21,15 @@
         <section id="templateManager" class="template-manager" aria-labelledby="templateManagerTitle">
           <p class="eyebrow">Prepare reusable wording</p>
           <h2 id="templateManagerTitle">Templates</h2>
-          <p class="template-manager-copy">Choose a contract type, then create or update a saved template before starting a batch.</p>
-          <label>Contract type<select id="templateSourceSelect" aria-label="Template contract type"></select></label>
-          <label>Saved template<select id="templateSelect" aria-label="Saved template"></select></label>
+          <p class="template-manager-copy">Choose a contract template, then update it or create a copy before starting a batch.</p>
+          <label>Contract template<select id="templateSelect" aria-label="Contract template"></select></label>
           <p id="templateVersion" class="template-version">Loading template…</p>
           <div class="template-actions">
             <button id="openTemplateBuilder" class="primary-button" type="button">Open template builder</button>
             <button id="deleteTemplate" class="delete-template-button" type="button" hidden>Delete template</button>
           </div>
-          <label class="new-template-label">New template name<input id="newTemplateName" type="text" placeholder="e.g. Paris Fashion Week 2027"></label>
-          <button id="createTemplate" class="secondary-button" type="button">Create template</button>
+          <label class="new-template-label">Name this template copy<input id="newTemplateName" type="text" placeholder="e.g. Paris Fashion Week 2027"></label>
+          <button id="createTemplate" class="secondary-button" type="button">Create copy</button>
           <section class="template-history-section" aria-labelledby="templateHistoryTitle">
             <h3 id="templateHistoryTitle">Version history</h3>
             <div id="templateHistory" class="template-history"></div>
@@ -40,12 +39,12 @@
         <div id="batchControls" hidden>
         <section class="import-section" aria-labelledby="importTitle">
           <h2 id="importTitle">Start a batch</h2>
-          <label>Contract type<select id="contractType" name="contractType"></select></label>
+          <label>Contract template<select id="batchTemplateSelect" name="templateId" aria-label="Contract template"></select></label>
           <label>Excel workbook<input id="workbookFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
           <div class="import-actions">
             <button id="uploadWorkbook" class="primary-button" type="button">Start batch</button>
           </div>
-          <p id="importSummary" class="import-summary">Choose a saved template. Fashion Week uses a workbook; Membership starts from local mock data.</p>
+          <p id="importSummary" class="import-summary">Choose a contract template. Fashion Week uses a workbook; Membership starts from local mock data.</p>
         </section>
         <section class="review-queue-section" aria-labelledby="reviewQueueTitle">
           <div class="review-queue-header">

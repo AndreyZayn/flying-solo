@@ -99,7 +99,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /id="saveTemplate"[^>]*>Save template<\/button>/);
   assert.match(pageHtml, /id="templateWorkspace"/);
   assert.match(pageHtml, /id="templateSelect"/);
-  assert.match(pageHtml, /id="createTemplate"[^>]*>Create template<\/button>/);
+  assert.match(pageHtml, /id="createTemplate"[^>]*>Create copy<\/button>/);
   assert.match(pageHtml, /id="templateHistory"/);
   assert.match(pageHtml, /id="deleteTemplate"[^>]*>Delete template<\/button>/);
   assert.match(pageHtml, /id="titleWysiwygEditor"[^>]+aria-label="Contract title editor"/);
