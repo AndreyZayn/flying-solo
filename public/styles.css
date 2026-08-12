@@ -40,7 +40,10 @@ button, input, select { font: inherit; }
 .template-history-section h3 { margin: 0 0 8px; font-family: Georgia, serif; font-size: 15px; }
 .template-history { display: grid; gap: 7px; color: var(--muted); font-size: 10px; }
 .template-history-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.template-history-actions { display: flex; align-items: center; gap: 5px; }
 .template-history-restore { cursor: pointer; padding: 3px 6px; border: 1px solid #c9c4b9; border-radius: 5px; background: #fff; color: var(--ink); font-size: 9px; font-weight: 800; }
+.template-history-delete { cursor: pointer; padding: 3px 6px; border: 1px solid #d9aaa4; border-radius: 5px; background: #fff; color: var(--danger); font-size: 9px; font-weight: 800; }
+.template-history-delete:hover { border-color: var(--danger); background: #f9e9e6; }
 .import-actions { display: flex; gap: 8px; }
 .import-actions .primary-button { padding: 8px 11px; font-size: 11px; }
 .import-summary { margin: 10px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }

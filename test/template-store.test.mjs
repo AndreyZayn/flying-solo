@@ -69,6 +69,8 @@ test("saves an approved template and retains a timestamped history copy", async 
     savedAt: "2026-08-10T12:00:00.000Z",
     markdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n",
     titleTemplate: "FLYING SOLO — {{BRAND_NAME}}",
+    snapshotId: "v001-2026-08-10T12-00-00.000Z.json",
+    deletable: true,
   }]);
 });
 
@@ -121,7 +123,7 @@ test("creates a new template by duplicating the selected saved template", async 
   });
 });
 
-test("deletes a custom template while preserving approved contract types", async () => {
+test("deletes a custom template and its saved versions", async () => {
   const { rootDir, store } = await fixture();
   const created = await store.create({
     sourceTemplateId: "fashion-week",
@@ -132,7 +134,6 @@ test("deletes a custom template while preserving approved contract types", async
     titleTemplate: "Paris — {{BRAND_NAME}}",
   });
 
-  await assert.rejects(store.remove("fashion-week"), /Built-in templates cannot be deleted/);
   assert.deepEqual(await store.remove(created.id), {
     id: created.id,
     label: created.label,
@@ -148,6 +149,54 @@ test("deletes a custom template while preserving approved contract types", async
   await assert.rejects(store.get(created.id), /Unknown contract template/);
   await assert.rejects(fs.access(path.join(rootDir, "data/runtime/templates/paris-fashion-week-2027.md")));
   await assert.rejects(fs.access(path.join(rootDir, "data/runtime/templates/history/paris-fashion-week-2027")));
+});
+
+test("removes an unused built-in template while keeping custom copies usable", async () => {
+  const { rootDir, store } = await fixture();
+  const copy = await store.create({
+    sourceTemplateId: "fashion-week",
+    label: "Paris Fashion Week 2027",
+  });
+
+  assert.deepEqual(await store.remove("fashion-week"), {
+    id: "fashion-week",
+    label: "Fashion Week Agreement",
+    deleted: true,
+  });
+  assert.deepEqual(await store.list(), [{
+    id: copy.id,
+    label: copy.label,
+    family: "fashion-week",
+    version: 1,
+    builtIn: false,
+  }]);
+  await assert.rejects(store.get("fashion-week"), /Unknown contract template/);
+  assert.equal((await store.get(copy.id)).markdown, "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n");
+  assert.equal(await fs.readFile(path.join(rootDir, "templates/fashion-week.md"), "utf8"), "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n");
+});
+
+test("deletes a saved runtime version without changing the current template", async () => {
+  const { rootDir, store } = await fixture();
+  const created = await store.create({
+    sourceTemplateId: "fashion-week",
+    label: "Paris Fashion Week 2027",
+  });
+  await store.save(created.id, {
+    markdown: "## EVENT AGREEMENT\n\nUpdated {{BRAND_NAME}}\n",
+    titleTemplate: "Paris — {{BRAND_NAME}}",
+  });
+  const [snapshot] = await store.history(created.id);
+
+  assert.equal(snapshot.deletable, true);
+  assert.match(snapshot.snapshotId, /^v001-/);
+  assert.deepEqual(await store.removeHistory(created.id, snapshot.snapshotId), {
+    id: created.id,
+    version: 1,
+    deleted: true,
+  });
+  assert.deepEqual(await store.history(created.id), []);
+  assert.equal((await store.get(created.id)).markdown, "## EVENT AGREEMENT\n\nUpdated {{BRAND_NAME}}\n");
+  await assert.rejects(fs.access(path.join(rootDir, "data/runtime/templates/history/paris-fashion-week-2027", snapshot.snapshotId)));
 });
 
 test("refuses a delete when custom template storage is not in its runtime directory", async () => {
@@ -179,6 +228,7 @@ test("keeps earlier Markdown snapshots visible as numbered versions", async () =
     savedAt: "2026-08-09T12:00:00.000Z",
     markdown: "## EVENT AGREEMENT\n\nPrevious {{BRAND_NAME}}\n",
     titleTemplate: "FLYING SOLO — {{BRAND_NAME}}",
+    deletable: false,
   }]);
 });
 

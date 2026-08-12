@@ -240,7 +240,7 @@ function renderTemplateVersion(template) {
   templateVersion.textContent = template
     ? `${template.builtIn ? "Standard" : "Custom"} template · Version ${template.version}`
     : "No template selected.";
-  deleteTemplateButton.hidden = !template || template.builtIn;
+  deleteTemplateButton.hidden = !template;
 }
 
 async function renderTemplateHistory() {
@@ -262,7 +262,18 @@ async function renderTemplateHistory() {
     restore.className = "template-history-restore";
     restore.textContent = "Restore";
     restore.addEventListener("click", () => restoreTemplate(snapshot.version).catch(showError));
-    row.append(label, restore);
+    const actions = document.createElement("div");
+    actions.className = "template-history-actions";
+    actions.append(restore);
+    if (snapshot.deletable) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "template-history-delete";
+      remove.textContent = "Delete version";
+      remove.addEventListener("click", () => deleteTemplateVersion(snapshot).catch(showError));
+      actions.append(remove);
+    }
+    row.append(label, actions);
     templateHistory.append(row);
   }
 }
@@ -651,21 +662,36 @@ async function restoreTemplate(version) {
 
 async function deleteActiveTemplate() {
   const template = activeTemplate();
-  if (!template || template.builtIn) throw new Error("Built-in templates cannot be deleted.");
+  if (!template) throw new Error("Choose a contract template first.");
   const confirmed = window.confirm(
-    `Delete “${template.label}”? Its saved versions will be permanently removed.`,
+    `Delete “${template.label}” from the library? Its saved versions will be permanently removed.`,
   );
   if (!confirmed) return;
   const response = await fetch(`/api/templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "Unable to delete the template.");
   templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
-  const replacement = templateCatalog.find((candidate) => candidate.family === template.family && candidate.builtIn);
-  if (!replacement) throw new Error("No standard template is available for this agreement.");
+  const replacement = templateCatalog.find((candidate) => candidate.family === template.family && candidate.builtIn)
+    ?? templateCatalog[0];
+  if (!replacement) throw new Error("Keep at least one contract template in the library.");
   activeTemplateId = replacement.id;
   await loadTemplate(replacement.id);
   setWorkspace("templates");
   showToast(`${result.label} deleted`);
+}
+
+async function deleteTemplateVersion(snapshot) {
+  if (!snapshot.deletable || !snapshot.snapshotId) throw new Error("This template version cannot be deleted.");
+  const confirmed = window.confirm(`Delete version ${snapshot.version}? This cannot be undone.`);
+  if (!confirmed) return;
+  const response = await fetch(
+    `/api/templates/${encodeURIComponent(activeTemplateId)}/history/${encodeURIComponent(snapshot.snapshotId)}`,
+    { method: "DELETE" },
+  );
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Unable to delete the template version.");
+  await renderTemplateHistory();
+  showToast(`Version ${result.version} deleted`);
 }
 
 async function verifyCurrentContract() {

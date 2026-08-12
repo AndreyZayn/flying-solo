@@ -64,6 +64,33 @@ test("deletes an unused custom template but protects a template used by the acti
   assert.deepEqual(deleted, ["paris-fashion-week-2027"]);
 });
 
+test("deletes one saved template version", async (context) => {
+  const removed = [];
+  const templateStore = {
+    removeHistory: async (templateId, snapshotId) => {
+      removed.push({ templateId, snapshotId });
+      return { id: templateId, version: 2, deleted: true };
+    },
+  };
+  const server = createAppServer({ reviewStore: createReadOnlyReviewStore(), templateStore });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  context.after(() => server.close());
+  const { port } = server.address();
+  const response = await fetch(`http://127.0.0.1:${port}/api/templates/fashion-week/history/v002-2026-08-12T12-00-00.000Z.json`, {
+    method: "DELETE",
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { id: "fashion-week", version: 2, deleted: true });
+  assert.deepEqual(removed, [{
+    templateId: "fashion-week",
+    snapshotId: "v002-2026-08-12T12-00-00.000Z.json",
+  }]);
+});
+
 test("serves the dashboard and registry", async (context) => {
   const { server, baseUrl } = await startServer();
   context.after(() => server.close());

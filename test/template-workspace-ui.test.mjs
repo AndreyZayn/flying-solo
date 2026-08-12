@@ -5,15 +5,23 @@ import test from "node:test";
 const html = await fs.readFile(new URL("../public/index.html", import.meta.url), "utf8");
 const app = await fs.readFile(new URL("../public/app.js", import.meta.url), "utf8");
 
-test("template workspace offers a preview and only exposes deletion for a custom template", () => {
+test("template workspace offers a preview and a deletion control", () => {
   assert.match(html, /id="previewTab"[^>]*>Preview<\/button>/);
   assert.match(html, /id="deleteTemplate"[^>]*>Delete template<\/button>/);
   assert.match(app, /previewTab\.hidden = false/);
   assert.match(app, /const editorVisible = view === "editor"/);
   assert.match(app, /workspaceMode === "templates" \? renderTemplatePreview\(\) : renderPreview\(\)/);
   assert.match(app, /if \(workspaceMode === "templates" && view === "preview"\) showResult\(\);/);
-  assert.match(app, /deleteTemplateButton\.hidden = !template \|\| template\.builtIn/);
+  assert.match(app, /deleteTemplateButton\.hidden = !template/);
   assert.match(app, /method: "DELETE"/);
+});
+
+test("shows template and version deletion controls for removable saved content", () => {
+  assert.match(app, /deleteTemplateButton\.hidden = !template/);
+  assert.match(app, /snapshot\.deletable/);
+  assert.match(app, /Delete version/);
+  assert.match(app, /async function deleteTemplateVersion/);
+  assert.match(app, /\/history\/\$\{encodeURIComponent\(snapshot\.snapshotId\)\}/);
 });
 
 test("uses one saved contract template selector instead of separate contract-type controls", () => {

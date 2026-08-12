@@ -39,11 +39,17 @@ function validateDefinitions(definitions) {
 }
 
 function emptyState() {
-  return { schemaVersion: 1, builtIns: {}, customTemplates: [] };
+  return { schemaVersion: 1, builtIns: {}, customTemplates: [], deletedBuiltIns: [] };
 }
 
 function validateState(state) {
-  if (!state || state.schemaVersion !== 1 || typeof state.builtIns !== "object" || !Array.isArray(state.customTemplates)) {
+  if (!state || state.schemaVersion !== 1 || typeof state.builtIns !== "object" || !Array.isArray(state.customTemplates)
+    || (state.deletedBuiltIns != null && !Array.isArray(state.deletedBuiltIns))) {
+    throw new Error("Template library state is invalid.");
+  }
+  const deletedBuiltIns = state.deletedBuiltIns ?? [];
+  if (new Set(deletedBuiltIns).size !== deletedBuiltIns.length
+    || deletedBuiltIns.some((templateId) => !TEMPLATE_ID_PATTERN.test(templateId))) {
     throw new Error("Template library state is invalid.");
   }
   const ids = new Set();
@@ -56,7 +62,7 @@ function validateState(state) {
     }
     ids.add(template.id);
   }
-  return state;
+  return { ...state, deletedBuiltIns };
 }
 
 function publicTemplate(template) {
@@ -88,6 +94,14 @@ function historyTimestamp(filename) {
   const matched = filename.replace(/\.md$/, "").match(/^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2}(?:\.\d+)?Z)$/);
   if (!matched) return filename;
   return `${matched[1]}:${matched[2]}:${matched[3]}`;
+}
+
+function validateSnapshot(snapshot) {
+  if (!Number.isSafeInteger(snapshot?.version) || snapshot.version < 1 || !snapshot.savedAt
+    || typeof snapshot.markdown !== "string" || typeof snapshot.titleTemplate !== "string") {
+    throw new Error("Template history snapshot is invalid.");
+  }
+  return snapshot;
 }
 
 function templateIdFromLabel(label, existingIds) {
@@ -153,6 +167,9 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     const [registered, library] = await Promise.all([definitions(), state()]);
     const standard = registered.find((candidate) => candidate.id === templateId);
     if (standard) {
+      if (library.deletedBuiltIns.includes(templateId)) {
+        throw new Error(`Unknown contract template: ${templateId}.`);
+      }
       const saved = library.builtIns[templateId] ?? {};
       return {
         ...standard,
@@ -222,14 +239,16 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
 
   async function list() {
     const [registered, library] = await Promise.all([definitions(), state()]);
-    const builtIns = await Promise.all(registered.map(async (template) => {
-      const saved = library.builtIns[template.id] ?? {};
-      return publicTemplate({
-        ...template,
-        version: await initialVersion(template, saved),
-        builtIn: true,
-      });
-    }));
+    const builtIns = await Promise.all(registered
+      .filter((template) => !library.deletedBuiltIns.includes(template.id))
+      .map(async (template) => {
+        const saved = library.builtIns[template.id] ?? {};
+        return publicTemplate({
+          ...template,
+          version: await initialVersion(template, saved),
+          builtIn: true,
+        });
+      }));
     const custom = library.customTemplates.map((template) => {
       const source = registered.find((candidate) => candidate.id === template.sourceTemplateId);
       return publicTemplate({ ...template, family: source.family, builtIn: false });
@@ -247,14 +266,13 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     const directory = safePath(rootDir, historyDirectory(template));
     try {
       const entries = await fs.readdir(directory);
-      const snapshots = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map(async (entry) => {
-        const snapshot = JSON.parse(await fs.readFile(path.join(directory, entry), "utf8"));
-        if (!Number.isSafeInteger(snapshot.version) || snapshot.version < 1 || !snapshot.savedAt || typeof snapshot.markdown !== "string" || typeof snapshot.titleTemplate !== "string") {
-          throw new Error("Template history snapshot is invalid.");
-        }
-        return snapshot;
-      }));
-      return [...await legacyHistory(template), ...snapshots].sort((left, right) => right.version - left.version);
+      const snapshots = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map(async (entry) => ({
+        ...validateSnapshot(JSON.parse(await fs.readFile(path.join(directory, entry), "utf8"))),
+        snapshotId: entry,
+        deletable: true,
+      })));
+      const legacy = (await legacyHistory(template)).map((snapshot) => ({ ...snapshot, deletable: false }));
+      return [...legacy, ...snapshots].sort((left, right) => right.version - left.version);
     } catch (error) {
       if (error?.code === "ENOENT") return legacyHistory(template);
       throw error;
@@ -329,14 +347,55 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     return save(templateId, snapshot);
   }
 
-  async function remove(templateId) {
+  async function removeHistory(templateId, snapshotId) {
     return locked(async () => {
       const template = await definition(templateId);
-      if (template.builtIn) throw new Error("Built-in templates cannot be deleted.");
+      const normalizedSnapshotId = String(snapshotId ?? "");
+      if (path.basename(normalizedSnapshotId) !== normalizedSnapshotId || !normalizedSnapshotId.endsWith(".json")) {
+        throw new Error("Only saved runtime versions can be deleted.");
+      }
+      const filename = safePath(rootDir, path.join(historyDirectory(template), normalizedSnapshotId));
+      let snapshot;
+      try {
+        snapshot = validateSnapshot(JSON.parse(await fs.readFile(filename, "utf8")));
+      } catch (error) {
+        if (error?.code === "ENOENT") throw new Error("Template version is not available.");
+        throw error;
+      }
+      await fs.rm(filename);
+      return { id: template.id, version: snapshot.version, deleted: true };
+    });
+  }
+
+  async function remove(templateId) {
+    return locked(async () => {
+      const [registered, library] = await Promise.all([definitions(), state()]);
+      const standard = registered.find((candidate) => candidate.id === templateId);
+      if (standard) {
+        if (library.deletedBuiltIns.includes(standard.id)) throw new Error(`Unknown contract template: ${templateId}.`);
+        const remaining = (await list()).filter((candidate) => candidate.id !== standard.id);
+        if (!remaining.length) throw new Error("Keep at least one contract template in the library.");
+        const nextBuiltIns = { ...library.builtIns };
+        delete nextBuiltIns[standard.id];
+        await writeJsonAtomic(statePath, {
+          ...library,
+          builtIns: nextBuiltIns,
+          deletedBuiltIns: [...library.deletedBuiltIns, standard.id],
+        });
+        const directory = safePath(rootDir, historyDirectory(standard));
+        try {
+          const entries = await fs.readdir(directory);
+          await Promise.all(entries.filter((entry) => entry.endsWith(".json"))
+            .map((entry) => fs.rm(path.join(directory, entry), { force: true })));
+        } catch (error) {
+          if (error?.code !== "ENOENT") throw error;
+        }
+        return { id: standard.id, label: standard.label, deleted: true };
+      }
+      const template = await definition(templateId);
       if (template.templateFile !== `data/runtime/templates/${template.id}.md`) {
         throw new Error("Custom template storage path is invalid.");
       }
-      const library = await state();
       const nextTemplates = library.customTemplates.filter((candidate) => candidate.id !== template.id);
       if (nextTemplates.length === library.customTemplates.length) {
         throw new Error(`Unknown contract template: ${templateId}.`);
@@ -350,5 +409,5 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     });
   }
 
-  return { list, get, save, create, history, restore, remove, placeholders, definition };
+  return { list, get, save, create, history, restore, removeHistory, remove, placeholders, definition };
 }
