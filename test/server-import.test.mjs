@@ -10,7 +10,7 @@ function reviewStore() {
     initialize: async () => {},
     getQueue: async () => queue,
     replaceQueue: async (next) => { queue = next; return { ...next, progress: { total: next.records.length, verified: 0, pending: next.records.length, complete: false } }; },
-    saveInput: async () => { throw new Error("not used"); },
+    saveDraft: async () => { throw new Error("not used"); },
     verify: async () => { throw new Error("not used"); },
   };
 }

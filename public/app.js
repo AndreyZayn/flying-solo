@@ -2,8 +2,6 @@ import { calculateDueDates, splitPaymentAmounts } from "/schedule.mjs";
 import { calculateEditorHeight, isResizeHandlePointer } from "/editor-sizing.mjs";
 import { selectFashionWeekCategory } from "/family-fields.mjs";
 import { normalizeEditorMarkdown, resolveMarkdownTemplate } from "/markdown-template.mjs";
-import { nextIncompleteRecord, reviewRecordPresentation } from "/review-selector.mjs";
-import { templatePreviewInput } from "/template-preview.mjs";
 import {
   displayPlaceholderValue,
   matchesPlaceholder,
@@ -27,68 +25,44 @@ const documentElement = document.querySelector("#contractDocument");
 const editorPanel = document.querySelector("#editorPanel");
 const editorResizeHandle = document.querySelector("#editorResizeHandle");
 const previewPanel = document.querySelector("#previewPanel");
-const contractOutputBar = document.querySelector("#contractOutputBar");
 const titleElement = document.querySelector("#contractTitle");
 const errorElement = document.querySelector("#errorMessage");
 const statusBadge = document.querySelector("#statusBadge");
 const editorTab = document.querySelector("#editorTab");
 const previewTab = document.querySelector("#previewTab");
-const documentTabs = document.querySelector("#documentTabs");
 const copyMarkdownButton = document.querySelector("#copyMarkdown");
-const copyTitleButton = document.querySelector("#copyTitle");
 const toast = document.querySelector("#toast");
-const templateWorkspaceButton = document.querySelector("#templateWorkspace");
-const batchWorkspaceButton = document.querySelector("#batchWorkspace");
-const templateManager = document.querySelector("#templateManager");
-const batchControls = document.querySelector("#batchControls");
-const templateCards = document.querySelector("#templateCards");
-const templateSourceSelect = document.querySelector("#templateSourceSelect");
-const templateCreatePanel = document.querySelector("#templateCreatePanel");
-const showTemplateCreateButton = document.querySelector("#showTemplateCreate");
-const cancelTemplateCreateButton = document.querySelector("#cancelTemplateCreate");
-const newTemplateName = document.querySelector("#newTemplateName");
-const createTemplateButton = document.querySelector("#createTemplate");
 const placeholderSearch = document.querySelector("#placeholderSearch");
 const placeholderList = document.querySelector("#placeholderList");
-const reviewQueueSelect = document.querySelector("#reviewQueueSelect");
-const selectedRecordStatus = document.querySelector("#selectedRecordStatus");
-const selectedRecordContext = document.querySelector("#selectedRecordContext");
+const reviewQueueElement = document.querySelector("#reviewQueue");
 const reviewProgress = document.querySelector("#reviewProgress");
 const batchComplete = document.querySelector("#batchComplete");
 const verifyContractButton = document.querySelector("#verifyContract");
 const saveTemplateButton = document.querySelector("#saveTemplate");
-const batchTemplateSelect = document.querySelector("#batchTemplateSelect");
+const contractTypeSelect = document.querySelector("#contractType");
 const workbookFile = document.querySelector("#workbookFile");
 const uploadWorkbookButton = document.querySelector("#uploadWorkbook");
+const membershipDemoButton = document.querySelector("#membershipDemo");
 const importSummary = document.querySelector("#importSummary");
 const fashionWeekFields = document.querySelector("#fashionWeekFields");
 const membershipFields = document.querySelector("#membershipFields");
 const membershipPackage = document.querySelector("#membershipPackage");
-const titleCaption = document.querySelector("#titleCaption");
 
 let registry;
 let placeholderRegistry = [];
 let currentResult;
 let contractEditor;
-let titleEditor;
 let view = "preview";
-let workspaceMode = "templates";
 let reviewQueue;
 let selectedRecordId;
 let activeTemplateId = "fashion-week";
 let templateMarkdown = "";
-let templateTitle = "";
-let templateCatalog = [];
-let activeEditor = "body";
 let renderTimer;
-let inputSaveTimer;
+let draftSaveTimer;
 let editorHeightFrame;
 let editorManuallySized = false;
 let generateController;
 let generateRevision = 0;
-let templatePreviewRevision = 0;
-let templatePreviewResult;
-let loadingRecord = false;
 
 function money(value) {
   return new Intl.NumberFormat("en-US", {
@@ -127,7 +101,7 @@ function todayIso() {
 }
 
 function readInput() {
-  if (activeFamily() === "membership") {
+  if (activeTemplateId === "membership") {
     const selectedPackage = registry.packages.find((item) => item.id === membershipPackage.value);
     return {
       brand: document.querySelector("#membershipBrand").value,
@@ -156,7 +130,7 @@ function readInput() {
 }
 
 function writeInput(input) {
-  const membership = activeFamily() === "membership";
+  const membership = activeTemplateId === "membership";
   fashionWeekFields.hidden = membership;
   membershipFields.hidden = !membership;
   if (membership) {
@@ -197,152 +171,14 @@ function selectedRecord() {
   return reviewQueue?.records.find((record) => record.id === selectedRecordId);
 }
 
-function activeTitleTemplate() {
-  return workspaceMode === "templates"
-    ? normalizeEditorMarkdown(titleEditor?.getMarkdown() ?? templateTitle).trim()
-    : templateTitle;
-}
-
-function activeTemplateMarkdown() {
-  return normalizeEditorMarkdown(
-    workspaceMode === "templates" ? contractEditor?.getMarkdown() ?? templateMarkdown : templateMarkdown,
-  );
-}
-
-function activeTemplate() {
-  return templateCatalog.find((template) => template.id === activeTemplateId);
-}
-
-function activeFamily() {
-  return activeTemplate()?.family ?? activeTemplateId;
-}
-
-function renderTemplateLibrary() {
-  const selectedSourceId = templateSourceSelect.value;
-  batchTemplateSelect.innerHTML = templateCatalog.map((template) =>
-    `<option value="${template.id}">${template.label}</option>`
-  ).join("");
-  batchTemplateSelect.value = activeTemplateId;
-  templateSourceSelect.innerHTML = templateCatalog.map((template) =>
-    `<option value="${template.id}">${template.label}</option>`
-  ).join("");
-  if (templateCatalog.some((template) => template.id === selectedSourceId)) {
-    templateSourceSelect.value = selectedSourceId;
-  } else {
-    templateSourceSelect.value = activeTemplateId;
-  }
-  const cards = templateCatalog.map((template) => {
-    const card = document.createElement("article");
-    card.className = `template-card${template.id === activeTemplateId ? " active" : ""}`;
-    const heading = document.createElement("h3");
-    heading.textContent = template.label;
-    const detail = document.createElement("p");
-    detail.textContent = `Works with ${template.family === "membership" ? "Membership" : "Fashion Week"}`;
-    const actions = document.createElement("div");
-    actions.className = "template-card-actions";
-    const open = document.createElement("button");
-    open.type = "button";
-    open.className = "secondary-button";
-    open.textContent = template.id === activeTemplateId ? "Editing" : "Open";
-    open.disabled = template.id === activeTemplateId;
-    open.addEventListener("click", () => loadTemplate(template.id).catch(showError));
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "copy-template-button";
-    copy.textContent = "Copy";
-    copy.addEventListener("click", () => openTemplateCreate(template.id));
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "template-card-delete";
-    remove.textContent = "Delete";
-    remove.addEventListener("click", () => deleteTemplate(template).catch(showError));
-    actions.append(open, copy, remove);
-    card.append(heading, detail, actions);
-    return card;
-  });
-  templateCards.replaceChildren(...cards);
-}
-
-function setWorkspace(mode) {
-  workspaceMode = mode;
-  const templates = mode === "templates";
-  templateManager.hidden = !templates;
-  batchControls.hidden = templates;
-  templateWorkspaceButton.classList.toggle("active", templates);
-  batchWorkspaceButton.classList.toggle("active", !templates);
-  templateWorkspaceButton.setAttribute("aria-pressed", String(templates));
-  batchWorkspaceButton.setAttribute("aria-pressed", String(!templates));
-  documentTabs.hidden = !templates;
-  editorTab.hidden = !templates;
-  previewTab.hidden = !templates;
-  if (!templates) view = "preview";
-  titleCaption.textContent = templates ? "Contract title template" : "Contract title";
-  editorTab.textContent = "Template editor";
-  previewTab.textContent = templates ? "Preview template" : "Preview";
-  previewTab.hidden = false;
-  previewTab.disabled = !templates && !currentResult;
-  copyMarkdownButton.hidden = templates;
-  verifyContractButton.hidden = templates;
-  if (templates) view = "editor";
-  showResult();
-}
-
-async function loadTemplate(templateId, { loadRecord = false } = {}) {
-  const [nextRegistry, nextPlaceholders, template] = await Promise.all([
-    fetch(`/api/config?templateId=${encodeURIComponent(templateId)}`).then(async (response) => {
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Unable to load contract configuration.");
-      return body;
-    }),
-    fetch(`/api/placeholders?templateId=${encodeURIComponent(templateId)}`).then(async (response) => {
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Unable to load placeholders.");
-      return body;
-    }),
-    fetch(`/api/templates/${encodeURIComponent(templateId)}`).then(async (response) => {
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Unable to load the saved template.");
-      return body;
-    }),
-  ]);
-  registry = nextRegistry;
-  placeholderRegistry = nextPlaceholders;
-  activeTemplateId = template.id;
-  templateMarkdown = template.markdown;
-  templateTitle = template.titleTemplate;
-  loadingRecord = true;
-  contractEditor.setMarkdown(templateMarkdown, false);
-  titleEditor.setMarkdown(templateTitle, false);
-  loadingRecord = false;
-  configureFamilyControls();
-  renderTemplateLibrary();
-  renderPlaceholderLibrary();
-  if (workspaceMode === "templates" && view === "preview") showResult();
-  if (loadRecord && selectedRecord()) await selectRecord(selectedRecord().id, { savePrevious: false });
-}
-
 function syncFieldEditability() {
-  const inputEditable = workspaceMode === "batch";
+  const inputEditable = view === "editor" && selectedRecord()?.status !== "verified";
   form.querySelectorAll("input, select").forEach((control) => { control.disabled = !inputEditable; });
-}
-
-function updateVerificationAction() {
-  const status = selectedRecord()?.status;
-  verifyContractButton.textContent = status === "changes_pending" ? "Update verification" : "Mark verified";
-  verifyContractButton.disabled = !currentResult || status === "verified";
-}
-
-function markSelectedRecordChanged() {
-  const record = selectedRecord();
-  if (record?.status !== "verified") return;
-  record.status = "changes_pending";
-  renderReviewQueue();
-  updateVerificationAction();
 }
 
 function updatePriceSummary() {
   if (!registry) return;
-  if (activeFamily() === "membership") {
+  if (activeTemplateId === "membership") {
     const selected = registry.packages.find((item) => item.id === membershipPackage.value);
     document.querySelector("#membershipPrice").textContent = selected ? money(selected.monthlyPrice) : "—";
     document.querySelector("#membershipServices").textContent = selected?.services.join(" + ") ?? "—";
@@ -359,7 +195,7 @@ function updatePriceSummary() {
 }
 
 function recalculateAmounts() {
-  if (activeFamily() !== "fashion-week") return;
+  if (activeTemplateId !== "fashion-week") return;
   updatePriceSummary();
   const balance = selectedCategory().fullPrice - activeGrantAmount();
   const amounts = splitPaymentAmounts(balance, 3);
@@ -369,7 +205,7 @@ function recalculateAmounts() {
 }
 
 function recalculateDates() {
-  if (activeFamily() !== "fashion-week") return;
+  if (activeTemplateId !== "fashion-week") return;
   const dates = calculateDueDates({ sendDate: sendDate.value, eventMonth: eventMonth.value, installments: 3 });
   document.querySelectorAll(".payment-date").forEach((input, index) => {
     input.value = dates[index];
@@ -388,9 +224,8 @@ function fitEditorToDocument() {
   cancelAnimationFrame(editorHeightFrame);
   editorHeightFrame = requestAnimationFrame(() => {
     if (editorManuallySized || editorPanel.hidden) return;
-    const bodyEditorHost = document.querySelector("#wysiwygEditor");
-    const toolbar = bodyEditorHost.querySelector(".toastui-editor-defaultUI-toolbar");
-    const content = bodyEditorHost.querySelector(".toastui-editor-ww-container .ProseMirror");
+    const toolbar = editorPanel.querySelector(".toastui-editor-defaultUI-toolbar");
+    const content = editorPanel.querySelector(".toastui-editor-ww-container .ProseMirror");
     if (!toolbar || !content) return;
     const height = calculateEditorHeight({
       toolbarHeight: toolbar.offsetHeight,
@@ -449,10 +284,7 @@ function enableEditorSizing() {
     }
   });
   contractEditor.on("change", fitEditorToDocument);
-  contractEditor.on("change", () => {
-    refreshPlaceholderFormatting();
-    if (loadingRecord || workspaceMode !== "templates") return;
-  });
+  contractEditor.on("change", scheduleDraftSave);
   window.addEventListener("resize", fitEditorToDocument);
   editorResizeHandle.addEventListener("pointerdown", beginEditorResize);
   fitEditorToDocument();
@@ -460,7 +292,8 @@ function enableEditorSizing() {
 
 function resolvedMarkdown() {
   if (!currentResult) throw new Error("Complete the contract fields before previewing.");
-  return resolveMarkdownTemplate(activeTemplateMarkdown(), currentResult.placeholders);
+  const templateMarkdown = normalizeEditorMarkdown(contractEditor.getMarkdown());
+  return resolveMarkdownTemplate(templateMarkdown, currentResult.placeholders);
 }
 
 function renderedContractHtml(markdown) {
@@ -500,54 +333,9 @@ function renderPreview() {
   return markdown;
 }
 
-async function renderTemplatePreview() {
-  const revision = ++templatePreviewRevision;
-  const normalizedTemplate = activeTemplateMarkdown();
-  const sampleInput = templatePreviewInput({ family: activeFamily(), registry });
-  templatePreviewResult = undefined;
-  copyTitleButton.disabled = true;
-  documentElement.replaceChildren();
-  titleElement.textContent = "Rendering sample contract…";
-  titleCaption.textContent = "Sample contract title";
-  statusBadge.textContent = "Rendering sample";
-  statusBadge.className = "status-badge checking";
-  try {
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        templateId: activeTemplateId,
-        input: sampleInput,
-        titleTemplate: activeTitleTemplate(),
-      }),
-    });
-    const result = await response.json();
-    if (revision !== templatePreviewRevision || workspaceMode !== "templates" || view !== "preview") return;
-    if (!response.ok) throw new Error(result.error || "Unable to render the sample contract.");
-    templatePreviewResult = result;
-    documentElement.innerHTML = renderedContractHtml(resolveMarkdownTemplate(normalizedTemplate, result.placeholders));
-    titleElement.textContent = result.title;
-    copyTitleButton.disabled = false;
-    errorElement.hidden = true;
-    statusBadge.textContent = "Sample preview";
-    statusBadge.className = "status-badge valid";
-  } catch (error) {
-    if (revision !== templatePreviewRevision || workspaceMode !== "templates" || view !== "preview") return;
-    copyTitleButton.disabled = true;
-    showError(error);
-  }
-}
-
 function showResult() {
-  const editorVisible = workspaceMode === "templates" && view === "editor";
-  if (workspaceMode === "templates" && editorVisible) renderTemplateTitle();
-  if (currentResult && workspaceMode === "batch") titleElement.textContent = currentResult.title;
-  const templateEditor = workspaceMode === "templates" && editorVisible;
-  const templatePreview = workspaceMode === "templates" && !editorVisible;
-  contractOutputBar.hidden = templateEditor;
-  titleCaption.textContent = templatePreview ? "Sample contract title" : (workspaceMode === "templates" ? "Contract title template" : "Contract title");
-  copyTitleButton.textContent = templatePreview ? "Copy sample title" : (workspaceMode === "templates" ? "Copy title template" : "Copy title");
-  copyTitleButton.disabled = templatePreview && !templatePreviewResult;
+  if (currentResult) titleElement.textContent = currentResult.title;
+  const editorVisible = view === "editor";
   placeholderLibrary.hidden = !editorVisible;
   editorPanel.hidden = !editorVisible;
   previewPanel.hidden = editorVisible;
@@ -556,46 +344,40 @@ function showResult() {
   editorTab.setAttribute("aria-pressed", String(editorVisible));
   previewTab.setAttribute("aria-pressed", String(!editorVisible));
   saveTemplateButton.hidden = !editorVisible;
-  updateVerificationAction();
+  verifyContractButton.disabled = !currentResult || selectedRecord()?.status === "verified";
   syncFieldEditability();
   if (editorVisible) {
-    templatePreviewRevision += 1;
-    templatePreviewResult = undefined;
     fitEditorToDocument();
-    refreshPlaceholderFormatting();
     return;
   }
-  if (workspaceMode === "templates") {
-    renderTemplatePreview();
-    return;
+  try {
+    renderPreview();
+  } catch (error) {
+    showError(error);
   }
-  try { renderPreview(); } catch (error) { showError(error); }
 }
 
 function renderReviewQueue() {
   if (!reviewQueue) return;
-  reviewQueueSelect.replaceChildren();
-  const total = reviewQueue.records.length;
-  const verified = reviewQueue.records.filter((record) => record.status === "verified").length;
-  const pending = total - verified;
-  const complete = total > 0 && pending === 0;
-  reviewQueue.progress = { total, verified, pending, complete };
+  reviewQueueElement.replaceChildren();
+  const { total, verified, pending, complete } = reviewQueue.progress;
   reviewProgress.textContent = `${verified} of ${total} verified · ${pending} remaining`;
   batchComplete.hidden = !complete;
   for (const record of reviewQueue.records) {
-    const presentation = reviewRecordPresentation(record, activeFamily());
-    const option = document.createElement("option");
-    option.value = record.id;
-    option.textContent = presentation.optionLabel;
-    reviewQueueSelect.append(option);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `review-record ${record.status}`;
+    button.classList.toggle("attention", Boolean(record.importIssues?.length));
+    button.classList.toggle("selected", record.id === selectedRecordId);
+    button.innerHTML = `<span class="review-record-top"><strong></strong><span class="review-state"></span></span><small></small>`;
+    button.querySelector("strong").textContent = record.input.brand;
+    button.querySelector(".review-state").textContent = record.status === "verified" ? "Verified" : record.importIssues?.length ? "Attention" : "Pending";
+    button.querySelector("small").textContent = activeTemplateId === "membership"
+      ? `${record.input.durationMonths} months · ${record.input.packageId}`
+      : `${record.input.eventCode} · ${record.input.eventMonth}${record.sourceRow ? ` · row ${record.sourceRow}` : ""}`;
+    button.addEventListener("click", () => selectRecord(record.id).catch(showError));
+    reviewQueueElement.append(button);
   }
-  reviewQueueSelect.value = selectedRecordId ?? reviewQueue.records[0]?.id ?? "";
-  const presentation = selectedRecord()
-    ? reviewRecordPresentation(selectedRecord(), activeFamily())
-    : undefined;
-  selectedRecordStatus.textContent = presentation ? `${presentation.symbol} ${presentation.label}` : "";
-  selectedRecordStatus.className = `review-selector-status ${presentation?.state ?? ""}`;
-  selectedRecordContext.textContent = presentation?.context ?? "";
 }
 
 async function refreshReviewQueue() {
@@ -606,36 +388,38 @@ async function refreshReviewQueue() {
   renderReviewQueue();
 }
 
-async function saveCurrentInput({ quiet = true } = {}) {
+async function saveCurrentDraft({ quiet = true } = {}) {
   const record = selectedRecord();
-  if (!record) return;
-  const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/input`, {
+  if (!record || record.status === "verified" || !contractEditor) return;
+  const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/draft`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ input: readInput() }),
+    body: JSON.stringify({
+      input: readInput(),
+      draftMarkdown: normalizeEditorMarkdown(contractEditor.getMarkdown()),
+    }),
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "Unable to save sourced data.");
+  if (!response.ok) throw new Error(body.error || "Unable to save draft.");
   Object.assign(record, body);
-  renderReviewQueue();
-  updateVerificationAction();
-  if (!quiet) showToast("Sourced data saved");
+  if (!quiet) showToast("Draft saved");
 }
 
-function scheduleInputSave() {
-  clearTimeout(inputSaveTimer);
-  inputSaveTimer = setTimeout(() => saveCurrentInput().catch(showError), 700);
+function scheduleDraftSave() {
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => saveCurrentDraft().catch(showError), 700);
 }
 
 async function selectRecord(recordId, { savePrevious = true } = {}) {
   if (recordId === selectedRecordId && selectedRecordId) return;
-  clearTimeout(inputSaveTimer);
-  if (savePrevious) await saveCurrentInput();
+  clearTimeout(draftSaveTimer);
+  if (savePrevious) await saveCurrentDraft();
   selectedRecordId = recordId;
   const record = selectedRecord();
   if (!record) throw new Error(`Unknown review record: ${recordId}.`);
-  if (activeTemplateId !== reviewQueue.batch.templateId) await loadTemplate(reviewQueue.batch.templateId);
+  activeTemplateId = reviewQueue.batch.templateId;
   writeInput(record.input);
+  contractEditor.setMarkdown(record.draftMarkdown || templateMarkdown, false);
   editorManuallySized = false;
   view = "preview";
   syncFieldEditability();
@@ -648,70 +432,17 @@ async function saveTemplate() {
   const response = await fetch(`/api/templates/${encodeURIComponent(activeTemplateId)}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ markdown, titleTemplate: activeTitleTemplate() }),
+    body: JSON.stringify({ markdown }),
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Unable to save template.");
   templateMarkdown = body.markdown;
-  templateTitle = body.titleTemplate;
-  templateCatalog = await fetch("/api/templates").then((response) => response.json());
-  renderTemplateLibrary();
-  showToast("Template saved");
-}
-
-function openTemplateCreate(sourceTemplateId = activeTemplateId) {
-  templateCreatePanel.hidden = false;
-  templateSourceSelect.value = sourceTemplateId;
-  newTemplateName.focus();
-}
-
-function closeTemplateCreate() {
-  templateCreatePanel.hidden = true;
-  newTemplateName.value = "";
-}
-
-async function createTemplate() {
-  const response = await fetch("/api/templates", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      sourceTemplateId: templateSourceSelect.value,
-      label: newTemplateName.value,
-    }),
-  });
-  const template = await response.json();
-  if (!response.ok) throw new Error(template.error || "Unable to create the template.");
-  templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
-  activeTemplateId = template.id;
-  closeTemplateCreate();
-  await loadTemplate(activeTemplateId);
-  setWorkspace("templates");
-  showToast("Template created");
-}
-
-async function deleteTemplate(template = activeTemplate()) {
-  if (!template) throw new Error("Choose a contract template first.");
-  const confirmed = window.confirm(
-    `Delete “${template.label}” from the library? This cannot be undone.`,
-  );
-  if (!confirmed) return;
-  const response = await fetch(`/api/templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Unable to delete the template.");
-  templateCatalog = await fetch("/api/templates").then((catalogResponse) => catalogResponse.json());
-  const replacement = templateCatalog.find((candidate) => candidate.family === template.family && candidate.builtIn)
-    ?? templateCatalog[0];
-  if (!replacement) throw new Error("Keep at least one contract template in the library.");
-  activeTemplateId = replacement.id;
-  await loadTemplate(replacement.id);
-  setWorkspace("templates");
-  showToast(`${result.label} deleted`);
+  showToast("Template saved for future contracts");
 }
 
 async function verifyCurrentContract() {
   const record = selectedRecord();
   if (!record || record.status === "verified") return;
-  await saveCurrentInput();
   await generate();
   if (!currentResult) throw new Error("Resolve contract errors before verification.");
   const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/verify`, {
@@ -719,13 +450,15 @@ async function verifyCurrentContract() {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       input: readInput(),
+      templateId: activeTemplateId,
+      templateMarkdown: normalizeEditorMarkdown(contractEditor.getMarkdown()),
     }),
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Unable to verify contract.");
   await refreshReviewQueue();
   showToast("Contract verified and stored");
-  const next = nextIncompleteRecord(reviewQueue.records, record.id);
+  const next = reviewQueue.records.find((candidate) => candidate.status === "pending");
   if (next) {
     selectedRecordId = undefined;
     await selectRecord(next.id, { savePrevious: false });
@@ -747,7 +480,7 @@ async function generate() {
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: activeTemplateId, input: readInput(), titleTemplate: activeTitleTemplate() }),
+      body: JSON.stringify({ templateId: activeTemplateId, input: readInput() }),
       signal: controller.signal,
     });
     const body = await response.json();
@@ -756,7 +489,7 @@ async function generate() {
     currentResult = body;
     previewTab.disabled = false;
     copyMarkdownButton.disabled = false;
-    updateVerificationAction();
+    verifyContractButton.disabled = selectedRecord()?.status === "verified";
     errorElement.hidden = true;
     statusBadge.textContent = "Valid";
     statusBadge.className = "status-badge valid";
@@ -776,8 +509,6 @@ async function generate() {
 }
 
 function scheduleGenerate() {
-  if (workspaceMode !== "batch") return;
-  markSelectedRecordChanged();
   clearTimeout(renderTimer);
   generateController?.abort();
   generateRevision += 1;
@@ -791,7 +522,7 @@ function scheduleGenerate() {
   errorElement.hidden = true;
   if (view === "preview") documentElement.replaceChildren();
   renderTimer = setTimeout(generate, 120);
-  scheduleInputSave();
+  scheduleDraftSave();
 }
 
 function showToast(message) {
@@ -836,66 +567,15 @@ function placeholderWidget(token) {
   element.className = "contract-placeholder-widget";
   element.contentEditable = "false";
   element.dataset.templateToken = token;
-  const label = document.createElement("span");
-  label.className = "contract-placeholder-label";
-  label.textContent = placeholderLabel(token);
-  const format = document.createElement("span");
-  format.className = "contract-placeholder-format";
-  element.append(label, format);
+  element.textContent = placeholderLabel(token);
   return element;
 }
 
-function renderTemplateTitle() {
-  const title = activeTitleTemplate();
-  const fragment = document.createDocumentFragment();
-  const tokenPattern = /\{\{(?:#IF\s+[A-Z0-9_]+|\/IF|[A-Z0-9_]+)\}\}/g;
-  let cursor = 0;
-
-  for (const match of title.matchAll(tokenPattern)) {
-    fragment.append(document.createTextNode(title.slice(cursor, match.index)));
-    const element = placeholderWidget(match[0]);
-    element.classList.add("title-template-token");
-    element.dataset.format = "Title";
-    element.querySelector(".contract-placeholder-format").textContent = "Title";
-    element.setAttribute("aria-label", `${placeholderLabel(match[0])} · Title`);
-    fragment.append(element);
-    cursor = match.index + match[0].length;
-  }
-
-  fragment.append(document.createTextNode(title.slice(cursor)));
-  titleElement.replaceChildren(fragment);
-}
-
-function placeholderFormatting(element) {
-  const formats = [];
-  if (element.closest("h1, h2, h3, h4, h5, h6")) formats.push("Heading");
-  if (element.closest("li")) formats.push("List item");
-  if (element.closest("strong, b")) formats.push("Bold");
-  if (element.closest("em, i")) formats.push("Italic");
-  return formats.length ? formats.join(" · ") : "Body text";
-}
-
-function refreshPlaceholderFormatting() {
-  requestAnimationFrame(() => {
-    document.querySelectorAll(".contract-placeholder-widget").forEach((widget) => {
-      const format = widget.querySelector(".contract-placeholder-format");
-      const context = widget.classList.contains("title-template-token") || widget.closest("#titleWysiwygEditor")
-        ? "Title"
-        : placeholderFormatting(widget);
-      widget.dataset.format = context;
-      widget.setAttribute("aria-label", `${widget.querySelector(".contract-placeholder-label")?.textContent ?? "Placeholder"} · ${context}`);
-      if (format) format.textContent = context;
-    });
-  });
-}
-
 function insertPlaceholder(placeholder) {
-  const target = activeEditor === "title" ? titleEditor : contractEditor;
-  target.focus();
-  target.insertText(placeholderInsertionText(placeholder, { inline: activeEditor === "title" }));
+  contractEditor.focus();
+  contractEditor.insertText(placeholderInsertionText(placeholder));
   fitEditorToDocument();
-  refreshPlaceholderFormatting();
-  showToast(`${placeholder.label} inserted${activeEditor === "title" ? " in title" : ""}`);
+  showToast(`${placeholder.label} inserted`);
 }
 
 function renderPlaceholderLibrary() {
@@ -923,16 +603,13 @@ function renderPlaceholderLibrary() {
       header.className = "placeholder-item-header";
       const label = document.createElement("strong");
       label.textContent = placeholder.label;
-      const kind = document.createElement("span");
-      kind.className = "placeholder-kind";
-      kind.textContent = placeholder.type === "condition" ? "Show only when" : "Filled from batch";
       const insert = document.createElement("button");
       insert.type = "button";
       insert.className = "placeholder-insert";
       insert.textContent = "Insert";
       insert.setAttribute("aria-label", `Insert ${placeholder.label}`);
       insert.addEventListener("click", () => insertPlaceholder(placeholder));
-      header.append(label, kind, insert);
+      header.append(label, insert);
 
       const token = document.createElement("code");
       token.className = "placeholder-token";
@@ -941,9 +618,7 @@ function renderPlaceholderLibrary() {
         : `{{${placeholder.key}}}`;
       const value = document.createElement("span");
       value.className = "placeholder-current-value";
-      value.textContent = workspaceMode === "templates"
-        ? (placeholder.type === "condition" ? "Available when its condition applies" : "Filled from the selected batch record")
-        : displayPlaceholderValue(placeholder, currentResult?.placeholders);
+      value.textContent = displayPlaceholderValue(placeholder, currentResult?.placeholders);
       if (placeholder.type === "condition") {
         value.classList.add(currentResult?.placeholders?.[placeholder.key] ? "active" : "inactive");
       }
@@ -966,16 +641,32 @@ function renderPlaceholderLibrary() {
 async function initialize() {
   const queueResponse = await fetch("/api/review-queue");
   if (!queueResponse.ok) throw new Error("Unable to load the contract review queue.");
-  reviewQueue = await queueResponse.json();
-  const templatesResponse = await fetch("/api/templates");
-  if (!templatesResponse.ok) throw new Error("Unable to load the saved templates.");
-  templateCatalog = await templatesResponse.json();
-  activeTemplateId = templateCatalog.some((template) => template.id === reviewQueue.batch.templateId)
-    ? reviewQueue.batch.templateId
-    : templateCatalog[0]?.id;
+  const loadedQueue = await queueResponse.json();
+  const queueTemplateId = loadedQueue.batch.templateId;
+  const templates = await fetch("/api/templates").then((response) => response.json());
+  contractTypeSelect.innerHTML = templates.map((item) => `<option value="${item.id}">${item.label}</option>`).join("");
+  const [loadedRegistry, loadedPlaceholders, template] = await Promise.all([
+    fetch(`/api/config?templateId=${encodeURIComponent(queueTemplateId)}`).then((response) => {
+      if (!response.ok) throw new Error("Unable to load contract configuration.");
+      return response.json();
+    }),
+    fetch(`/api/placeholders?templateId=${encodeURIComponent(queueTemplateId)}`).then((response) => {
+      if (!response.ok) throw new Error("Unable to load placeholders.");
+      return response.json();
+    }),
+    fetch(`/api/templates/${encodeURIComponent(queueTemplateId)}`).then((response) => {
+      if (!response.ok) throw new Error("Unable to load the contract template.");
+      return response.json();
+    }),
+  ]);
+  registry = loadedRegistry;
+  placeholderRegistry = loadedPlaceholders;
+  reviewQueue = loadedQueue;
+  activeTemplateId = reviewQueue.batch.templateId;
+  templateMarkdown = template.markdown;
   contractEditor = new toastui.Editor({
     el: document.querySelector("#wysiwygEditor"),
-    initialValue: "",
+    initialValue: templateMarkdown.trim(),
     initialEditType: "wysiwyg",
     hideModeSwitch: true,
     usageStatistics: false,
@@ -992,22 +683,8 @@ async function initialize() {
       toDOM: placeholderWidget,
     }],
   });
-  titleEditor = new toastui.Editor({
-    el: document.querySelector("#titleWysiwygEditor"),
-    initialValue: "",
-    initialEditType: "wysiwyg",
-    hideModeSwitch: true,
-    usageStatistics: false,
-    autofocus: false,
-    height: "116px",
-    minHeight: "116px",
-    toolbarItems: [["bold", "italic"]],
-    widgetRules: [{
-      rule: /\{\{(?:#IF\s+[A-Z0-9_]+|\/IF|[A-Z0-9_]+)\}\}/,
-      toDOM: placeholderWidget,
-    }],
-  });
   enableEditorSizing();
+  configureFamilyControls();
   sendDate.value = todayIso();
   form.addEventListener("input", scheduleGenerate);
   form.addEventListener("change", scheduleGenerate);
@@ -1021,10 +698,7 @@ async function initialize() {
   });
   editorTab.addEventListener("click", () => { view = "editor"; showResult(); });
   previewTab.addEventListener("click", () => { view = "preview"; showResult(); });
-  copyTitleButton.addEventListener("click", () => copyText(
-    workspaceMode === "templates" && view === "preview" ? templatePreviewResult?.title : (workspaceMode === "templates" ? activeTitleTemplate() : currentResult?.title),
-    workspaceMode === "templates" && view === "preview" ? "Sample title copied" : (workspaceMode === "templates" ? "Title template copied" : "Title copied"),
-  ));
+  document.querySelector("#copyTitle").addEventListener("click", () => copyText(currentResult?.title, "Title copied"));
   copyMarkdownButton.addEventListener("click", async () => {
     try {
       await copyContract();
@@ -1034,39 +708,20 @@ async function initialize() {
   });
   saveTemplateButton.addEventListener("click", () => saveTemplate().catch(showError));
   verifyContractButton.addEventListener("click", () => verifyCurrentContract().catch(showError));
-  reviewQueueSelect.addEventListener("change", () => selectRecord(reviewQueueSelect.value).catch(showError));
   placeholderSearch.addEventListener("input", renderPlaceholderLibrary);
   uploadWorkbookButton.addEventListener("click", () => uploadWorkbook().catch(showError));
-  templateWorkspaceButton.addEventListener("click", () => loadTemplate(activeTemplateId)
-    .then(() => setWorkspace("templates")).catch(showError));
-  batchWorkspaceButton.addEventListener("click", async () => {
-    try {
-      view = "preview";
-      await loadTemplate(reviewQueue.batch.templateId);
-      setWorkspace("batch");
-      const firstRecord = reviewQueue.records.find((record) => record.status !== "verified") ?? reviewQueue.records[0];
-      await selectRecord(firstRecord.id, { savePrevious: false });
-    } catch (error) {
-      showError(error);
-    }
-  });
-  showTemplateCreateButton.addEventListener("click", () => openTemplateCreate());
-  cancelTemplateCreateButton.addEventListener("click", closeTemplateCreate);
-  createTemplateButton.addEventListener("click", () => createTemplate().catch(showError));
-  document.querySelector("#wysiwygEditor").addEventListener("focusin", () => { activeEditor = "body"; });
-  document.querySelector("#titleWysiwygEditor").addEventListener("focusin", () => { activeEditor = "title"; });
-  titleEditor.on("change", () => {
-    refreshPlaceholderFormatting();
-  });
+  membershipDemoButton.addEventListener("click", () => loadMembershipDemo().catch(showError));
+  renderPlaceholderLibrary();
   renderReviewQueue();
-  await loadTemplate(activeTemplateId);
-  setWorkspace("templates");
+  const firstRecord = reviewQueue.records.find((record) => record.status === "pending") ?? reviewQueue.records[0];
+  await selectRecord(firstRecord.id, { savePrevious: false });
 }
 
 initialize().catch(showError);
 
 function configureFamilyControls() {
-  if (activeFamily() === "fashion-week") {
+  contractTypeSelect.value = activeTemplateId;
+  if (activeTemplateId === "fashion-week") {
     eventSelect.innerHTML = registry.events.map((event) => `<option value="${event.code}">${event.code} · ${event.label}</option>`).join("");
     categorySelect.innerHTML = registry.categories.map((category) => `<option value="${category.id}">${category.label}</option>`).join("");
     customGrantAmount.value = String(registry.grant.defaultAmount);
@@ -1078,27 +733,30 @@ function configureFamilyControls() {
 async function activateQueue(queue) {
   reviewQueue = queue;
   activeTemplateId = queue.batch.templateId;
+  contractTypeSelect.value = activeTemplateId;
+  const [nextRegistry, nextPlaceholders, template] = await Promise.all([
+    fetch(`/api/config?templateId=${encodeURIComponent(activeTemplateId)}`).then((response) => response.json()),
+    fetch(`/api/placeholders?templateId=${encodeURIComponent(activeTemplateId)}`).then((response) => response.json()),
+    fetch(`/api/templates/${encodeURIComponent(activeTemplateId)}`).then((response) => response.json()),
+  ]);
+  registry = nextRegistry;
+  placeholderRegistry = nextPlaceholders;
+  templateMarkdown = template.markdown;
+  configureFamilyControls();
   selectedRecordId = undefined;
-  await loadTemplate(activeTemplateId);
+  renderPlaceholderLibrary();
   renderReviewQueue();
-  view = "preview";
-  setWorkspace("batch");
   await selectRecord(queue.records[0].id, { savePrevious: false });
 }
 
 async function uploadWorkbook() {
-  const selectedTemplate = templateCatalog.find((template) => template.id === batchTemplateSelect.value);
-  if (!selectedTemplate) throw new Error("Choose a saved template first.");
-  if (selectedTemplate.family === "membership") {
-    await loadMembershipDemo(selectedTemplate.id);
-    return;
-  }
   const file = workbookFile.files[0];
   if (!file) throw new Error("Choose an .xlsx workbook first.");
+  if (contractTypeSelect.value !== "fashion-week") throw new Error("Workbook upload is currently mapped for Fashion Week files. Use Membership demo for the second family.");
   uploadWorkbookButton.disabled = true;
   importSummary.textContent = `Importing ${file.name}…`;
   try {
-    const response = await fetch(`/api/import-workbook?templateId=${encodeURIComponent(batchTemplateSelect.value)}`, { method: "POST", headers: { "content-type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": file.name }, body: file });
+    const response = await fetch(`/api/import-workbook?templateId=${encodeURIComponent(contractTypeSelect.value)}`, { method: "POST", headers: { "content-type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": file.name }, body: file });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "Unable to import workbook.");
     const attention = body.records.filter((record) => record.importIssues?.length).length;
@@ -1109,10 +767,10 @@ async function uploadWorkbook() {
   }
 }
 
-async function loadMembershipDemo(templateId) {
-  const response = await fetch(`/api/demo/membership?templateId=${encodeURIComponent(templateId)}`, { method: "POST" });
+async function loadMembershipDemo() {
+  const response = await fetch("/api/demo/membership", { method: "POST" });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Unable to load Membership demo.");
-  importSummary.textContent = "Membership mock contract loaded with the selected saved template.";
+  importSummary.textContent = "Membership mock contract loaded. Save or edit its template without affecting Fashion Week.";
   await activateQueue(body);
 }

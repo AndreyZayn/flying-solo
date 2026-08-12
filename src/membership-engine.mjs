@@ -39,7 +39,6 @@ export function buildMembershipContract(input, registry) {
   const placeholders = {
     DESIGNER_NAME: representative,
     BRAND: brand,
-    MEMBERSHIP_LOCATION: registry.location,
     CATEGORY_DISPLAY: categoryDisplay,
     START_DATE: displayDate(start),
     DURATION: `${durationMonths} months`,
