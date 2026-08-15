@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "location": "NY",
+  "packages": [
+    { "id": "beauty-small-store", "label": "Beauty (small) — NY Store", "category": "Beauty", "size": "small", "services": ["NY Store"], "monthlyPrice": 750 },
+    { "id": "beauty-large-store", "label": "Beauty (large) — NY Store", "category": "Beauty", "size": "large", "services": ["NY Store"], "monthlyPrice": 1000 },
+    { "id": "clothing-store", "label": "Clothing — NY Store", "category": "Clothing", "services": ["NY Store"], "monthlyPrice": 1500 },
+    { "id": "clothing-store-pr", "label": "Clothing — NY Store + PR", "category": "Clothing", "services": ["NY Store", "PR"], "monthlyPrice": 2000 },
+    { "id": "accessory-store", "label": "Accessory — NY Store", "category": "Accessory", "services": ["NY Store"], "monthlyPrice": 1500 },
+    { "id": "accessory-store-pr", "label": "Accessory — NY Store + PR", "category": "Accessory", "services": ["NY Store", "PR"], "monthlyPrice": 1500 }
+  ],
+  "durationBenefits": {
+    "4": "",
+    "6": "Fashion Week participation at 50% off",
+    "12": "Fashion Week participation at 100% off"
+  }
+}

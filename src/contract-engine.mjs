@@ -131,6 +131,7 @@ export function buildContract(input, registry) {
   const placeholders = {
     EVENT_CODE: eventCode,
     EVENT_MONTH: eventMonth,
+    TITLE_EVENT_MONTH: titleSeason(eventMonth),
     REPRESENTATIVE_NAME: representative,
     BRAND_NAME: brand,
     FULL_PRICE: money(commercial.fullPrice),

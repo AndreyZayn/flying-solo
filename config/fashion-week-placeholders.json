@@ -4,28 +4,35 @@
     "label": "Fashion week",
     "description": "The event code, such as NYFW or PFW.",
     "type": "value",
-    "group": "Contract details"
+    "group": "Fashion week"
   },
   {
     "key": "EVENT_MONTH",
     "label": "Event month",
     "description": "The month and year of the fashion week event.",
     "type": "value",
-    "group": "Contract details"
+    "group": "Fashion week"
+  },
+  {
+    "key": "TITLE_EVENT_MONTH",
+    "label": "Title event month",
+    "description": "The abbreviated event month used in the contract title.",
+    "type": "value",
+    "group": "Fashion week"
   },
   {
     "key": "REPRESENTATIVE_NAME",
     "label": "Representative name",
     "description": "The person representing the participating brand.",
     "type": "value",
-    "group": "Contract details"
+    "group": "People and brand"
   },
   {
     "key": "BRAND_NAME",
     "label": "Brand name",
     "description": "The participating brand named in the agreement.",
     "type": "value",
-    "group": "Contract details"
+    "group": "People and brand"
   },
   {
     "key": "FULL_PRICE",
@@ -60,69 +67,69 @@
     "label": "Payment 1 due date",
     "description": "The first payment deadline.",
     "type": "value",
-    "group": "Payments"
+    "group": "Payment schedule"
   },
   {
     "key": "PAYMENT_1_AMOUNT",
     "label": "Payment 1 amount",
     "description": "The first scheduled payment amount.",
     "type": "value",
-    "group": "Payments"
+    "group": "Payment schedule"
   },
   {
     "key": "PAYMENT_2_DUE_DATE",
     "label": "Payment 2 due date",
     "description": "The second payment deadline.",
     "type": "value",
-    "group": "Payments"
+    "group": "Payment schedule"
   },
   {
     "key": "PAYMENT_2_AMOUNT",
     "label": "Payment 2 amount",
     "description": "The second scheduled payment amount.",
     "type": "value",
-    "group": "Payments"
+    "group": "Payment schedule"
   },
   {
     "key": "PAYMENT_3_DUE_DATE",
     "label": "Payment 3 due date",
     "description": "The third payment deadline.",
     "type": "value",
-    "group": "Payments"
+    "group": "Payment schedule"
   },
   {
     "key": "PAYMENT_3_AMOUNT",
     "label": "Payment 3 amount",
     "description": "The third scheduled payment amount.",
     "type": "value",
-    "group": "Payments"
+    "group": "Payment schedule"
   },
   {
     "key": "GRANT_ENABLED",
     "label": "Grant section",
     "description": "Shows its content only when a grant is enabled.",
     "type": "condition",
-    "group": "Conditional sections"
+    "group": "Show only when"
   },
   {
     "key": "ACCESSORY_ENABLED",
     "label": "Accessory clause",
     "description": "Shows its content only for accessory-family brands.",
     "type": "condition",
-    "group": "Conditional sections"
+    "group": "Show only when"
   },
   {
     "key": "PAYMENT_2_ENABLED",
     "label": "Payment 2 section",
     "description": "Shows its content when a second payment exists.",
     "type": "condition",
-    "group": "Conditional sections"
+    "group": "Show only when"
   },
   {
     "key": "PAYMENT_3_ENABLED",
     "label": "Payment 3 section",
     "description": "Shows its content when a third payment exists.",
     "type": "condition",
-    "group": "Conditional sections"
+    "group": "Show only when"
   }
 ]

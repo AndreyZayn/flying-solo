@@ -1,10 +1,14 @@
 const PLACEHOLDER_KEY_PATTERN = /^[A-Z0-9_]+$/;
 
-export function placeholderInsertionText(placeholder) {
+export function placeholderInsertionText(placeholder, { inline = false } = {}) {
   const key = String(placeholder?.key ?? "");
   if (!PLACEHOLDER_KEY_PATTERN.test(key)) throw new Error("Invalid placeholder key.");
   if (placeholder.type === "value") return `{{${key}}}`;
-  if (placeholder.type === "condition") return `{{#IF ${key}}}\n\n{{/IF}}`;
+  if (placeholder.type === "condition") {
+    return inline
+      ? `{{#IF ${key}}}Optional title text{{/IF}}`
+      : `{{#IF ${key}}}\n\n{{/IF}}`;
+  }
   throw new Error(`Unsupported placeholder type: ${placeholder?.type}.`);
 }
 

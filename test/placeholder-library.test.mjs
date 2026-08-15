@@ -20,6 +20,10 @@ test("creates value and complete conditional insertion tokens", async () => {
     placeholderInsertionText({ key: "GRANT_ENABLED", type: "condition" }),
     "{{#IF GRANT_ENABLED}}\n\n{{/IF}}",
   );
+  assert.equal(
+    placeholderInsertionText({ key: "GRANT_ENABLED", type: "condition" }, { inline: true }),
+    "{{#IF GRANT_ENABLED}}Optional title text{{/IF}}",
+  );
 });
 
 test("filters placeholders by label, key, or description", async () => {

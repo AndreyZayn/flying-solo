@@ -10,10 +10,41 @@
   <body>
     <header class="app-header">
       <h1>Flying Solo Contract Review</h1>
+      <nav class="workspace-switcher" aria-label="Workspace">
+        <button id="templateWorkspace" class="workspace-switch active" type="button" aria-pressed="true">Templates</button>
+        <button id="batchWorkspace" class="workspace-switch" type="button" aria-pressed="false">Batch review</button>
+      </nav>
     </header>
 
     <main class="workspace">
       <aside class="control-panel">
+        <section id="templateManager" class="template-manager" aria-labelledby="templateManagerTitle">
+          <p class="eyebrow">Reusable agreements</p>
+          <h2 id="templateManagerTitle">Template library</h2>
+          <p class="template-manager-copy">Each card is a complete contract template. To make a revision, copy one and name it yourself — for example, “Fashion Week v1”.</p>
+          <button id="showTemplateCreate" class="primary-button" type="button">New template</button>
+          <section id="templateCreatePanel" class="template-create-panel" aria-label="Create a template" hidden>
+            <label>Template name<input id="newTemplateName" type="text" placeholder="e.g. Fashion Week v1"></label>
+            <label>Start with<select id="templateSourceSelect" aria-label="Start with template"></select></label>
+            <div class="template-create-actions">
+              <button id="createTemplate" class="primary-button" type="button">Create template</button>
+              <button id="cancelTemplateCreate" class="secondary-button" type="button">Cancel</button>
+            </div>
+          </section>
+          <div id="templateCards" class="template-cards" aria-live="polite"></div>
+        </section>
+
+        <div id="batchControls" hidden>
+        <section class="import-section" aria-labelledby="importTitle">
+          <h2 id="importTitle">Start a batch</h2>
+          <label>Contract template<select id="batchTemplateSelect" name="templateId" aria-label="Contract template"></select></label>
+          <label>Excel workbook<input id="workbookFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+          <div class="import-actions">
+            <button id="uploadWorkbook" class="primary-button" type="button">Start batch</button>
+          </div>
+          <p id="importSummary" class="import-summary">Choose a contract template. Fashion Week uses a workbook; Membership starts from local mock data.</p>
+          <p class="import-summary">To change contract wording, open Templates and create a named copy before editing it.</p>
+        </section>
         <section class="review-queue-section" aria-labelledby="reviewQueueTitle">
           <div class="review-queue-header">
             <div>
@@ -22,7 +53,12 @@
             </div>
           </div>
           <div id="batchComplete" class="batch-complete" hidden>All contracts verified and stored.</div>
-          <div id="reviewQueue" class="review-queue" aria-label="Contracts to review"></div>
+          <label class="review-selector-label" for="reviewQueueSelect">Uploaded brand</label>
+          <select id="reviewQueueSelect" class="review-selector" aria-label="Select a contract"></select>
+          <div class="review-selector-detail">
+            <span id="selectedRecordStatus" class="review-selector-status"></span>
+            <span id="selectedRecordContext" class="review-selector-context"></span>
+          </div>
         </section>
 
         <div class="status-row">
@@ -30,6 +66,7 @@
         </div>
 
         <form id="contractForm">
+          <div id="fashionWeekFields">
           <div class="field-row two-up">
             <label><span class="field-label">Fashion week <span class="source-indicator" data-source-field="eventCode" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><select id="eventCode" name="eventCode"></select></label>
             <label><span class="field-label">Event month <span class="source-indicator" data-source-field="eventMonth" data-tooltip="Sourced from Flying Solo data" aria-label="Sourced from Flying Solo data" tabindex="0">*</span></span><input id="eventMonth" name="eventMonth" type="month" value="2027-02"></label>
@@ -67,7 +104,21 @@
             <div class="payment-grid"><input class="payment-date" aria-label="Payment 2 due date" type="date"><input class="payment-amount" aria-label="Payment 2 amount" type="number" min="0" step="0.01"></div>
             <div class="payment-grid"><input class="payment-date" aria-label="Payment 3 due date" type="date"><input class="payment-amount" aria-label="Payment 3 amount" type="number" min="0" step="0.01"></div>
           </section>
+          </div>
+          <div id="membershipFields" hidden>
+            <label>Brand<input id="membershipBrand" type="text"></label>
+            <label>Brand representative name<input id="membershipRepresentative" type="text"></label>
+            <label>Brand representative email<input id="membershipEmail" type="email"></label>
+            <label>Membership package<select id="membershipPackage"></select></label>
+            <label>Initial term<select id="membershipDuration"><option value="4">4 months</option><option value="6">6 months</option><option value="12">12 months</option></select></label>
+            <label>Membership start date<input id="membershipStartDate" type="date"></label>
+            <section class="price-card" aria-label="Membership package summary">
+              <div><span>Monthly membership fee</span><strong id="membershipPrice">—</strong></div>
+              <div><span>Included services</span><strong id="membershipServices">—</strong></div>
+            </section>
+          </div>
         </form>
+        </div>
 
         <section id="placeholderLibrary" class="placeholder-library" aria-labelledby="placeholderLibraryTitle" hidden>
           <h3 id="placeholderLibraryTitle">Placeholders</h3>
@@ -77,21 +128,21 @@
       </aside>
 
       <section class="document-panel">
-        <div class="output-bar">
+        <div id="contractOutputBar" class="output-bar">
           <div class="title-output">
-            <span class="field-caption">Contract title</span>
+            <span id="titleCaption" class="field-caption">Contract title</span>
             <strong id="contractTitle">Generating…</strong>
           </div>
           <button id="copyTitle" class="secondary-button" type="button">Copy title</button>
         </div>
 
         <div class="document-toolbar">
-          <div class="tabs">
-            <button id="previewTab" class="tab active" type="button" aria-pressed="true" disabled>Preview</button>
-            <button id="editorTab" class="tab" type="button" aria-pressed="false">Edit contract</button>
+          <div id="documentTabs" class="tabs">
+            <button id="previewTab" class="tab active" type="button" aria-pressed="true">Preview</button>
+            <button id="editorTab" class="tab" type="button" aria-pressed="false">Template editor</button>
           </div>
           <div class="document-actions">
-            <button id="saveTemplate" class="secondary-button editor-only-action" type="button" hidden>Save template</button>
+            <button id="saveTemplate" class="secondary-button editor-only-action" type="button" hidden>Save changes</button>
             <button id="copyMarkdown" class="secondary-button" type="button" disabled>Copy Markdown</button>
             <button id="verifyContract" class="primary-button" type="button" disabled>Mark verified</button>
           </div>
@@ -99,6 +150,14 @@
 
         <div id="errorMessage" class="error-message" hidden></div>
         <div id="editorPanel" class="editor-panel" hidden>
+          <section class="title-editor-panel" aria-labelledby="titleEditorTitle">
+            <div>
+              <span class="field-caption">Contract title template</span>
+              <h2 id="titleEditorTitle">Title</h2>
+              <p>Use the same placeholder buttons as the contract body. Conditional title text stays between its two gold markers.</p>
+            </div>
+            <div id="titleWysiwygEditor" aria-label="Contract title editor"></div>
+          </section>
           <div id="wysiwygEditor" aria-label="Contract editor"></div>
           <div id="editorResizeHandle" class="editor-resize-handle" role="separator" aria-label="Resize contract editor" aria-orientation="horizontal"></div>
         </div>

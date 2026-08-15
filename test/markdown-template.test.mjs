@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   escapeMarkdownValue,
   normalizeEditorMarkdown,
+  resolveTextTemplate,
   resolveMarkdownTemplate,
   unwrapEditorWidgets,
 } from "../public/markdown-template.mjs";
@@ -34,6 +35,23 @@ test("replaces simple uppercase placeholders with Markdown-escaped values", () =
   assert.equal(
     resolved,
     "Brand: **A \\*bold\\* \\[brand\\] \\<script\\>** ($1,200)",
+  );
+});
+
+test("resolves title templates as plain text without Markdown escape slashes", () => {
+  assert.equal(
+    resolveTextTemplate(
+      "Agreement — {{BRAND_NAME}}{{#IF GRANT_ENABLED}} \\- \\(grant\\){{/IF}}",
+      { BRAND_NAME: "Test Brand Co.", GRANT_ENABLED: true },
+    ),
+    "Agreement — Test Brand Co. - (grant)",
+  );
+});
+
+test("preserves a literal backslash in a title placeholder value", () => {
+  assert.equal(
+    resolveTextTemplate("Agreement for {{BRAND_NAME}}", { BRAND_NAME: "Test \\. Brand" }),
+    "Agreement for Test \\. Brand",
   );
 });
 

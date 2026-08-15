@@ -67,6 +67,7 @@ test("builds the title, raw placeholder context, and commercial result", () => {
     placeholders: {
       EVENT_CODE: "NYFW",
       EVENT_MONTH: "February 2027",
+      TITLE_EVENT_MONTH: "Feb 2027",
       REPRESENTATIVE_NAME: "Mumtoz Mastura",
       BRAND_NAME: "Mumtoz Mariam",
       FULL_PRICE: "$6,900",

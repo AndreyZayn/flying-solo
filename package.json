@@ -4,12 +4,14 @@
   "type": "module",
   "scripts": {
     "build:vendor": "esbuild src/vendor/toastui-browser-entry.mjs --bundle --minify --format=iife --target=safari15 --outfile=public/vendor/toastui-editor-all.min.js",
+    "package:mac": "node scripts/build-macos-package.mjs",
     "start": "node server.mjs",
     "test": "node --test"
   },
   "dependencies": {
     "@toast-ui/editor": "^3.2.2",
     "dompurify": "^3.4.13",
+    "exceljs": "^4.4.0",
     "marked": "^18.0.9"
   },
   "devDependencies": {

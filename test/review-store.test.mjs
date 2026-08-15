@@ -19,7 +19,6 @@ const seededQueue = {
     id: "brand-1",
     status: "pending",
     input: { brand: "Example Brand", representative: "Example Person" },
-    draftMarkdown: null,
     verifiedAt: null,
   }],
 };
@@ -54,16 +53,29 @@ test("seeds the runtime queue and verified-contract handoff directory on first r
   assert.equal(await fs.access(archivePath).then(() => true, () => false), false);
 });
 
-test("persists record-specific field and editor drafts", async () => {
+test("persists record-specific sourced input without a contract-body draft", async () => {
   const { store } = await setupStore();
-  await store.saveDraft("brand-1", {
+  await store.saveInput("brand-1", {
     input: { brand: "Edited Brand", representative: "Edited Person" },
-    draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
   });
   const record = (await store.getQueue()).records[0];
   assert.equal(record.input.brand, "Edited Brand");
-  assert.match(record.draftMarkdown, /\{\{BRAND_NAME\}\}/);
+  assert.equal(record.draftMarkdown, undefined);
+  assert.equal(record.draftTitleTemplate, undefined);
   assert.equal(record.updatedAt, "2026-08-10T12:00:00.000Z");
+});
+
+test("atomically replaces the active review queue for a new uploaded batch", async () => {
+  const { store } = await setupStore();
+  const replacement = {
+    schemaVersion: 1,
+    batch: { id: "uploaded-batch", label: "Uploaded", templateId: "fashion-week" },
+    records: [{ id: "row-2", status: "pending", input: { brand: "Uploaded Brand" }, importIssues: [] }],
+  };
+  const queue = await store.replaceQueue(replacement);
+  assert.equal(queue.batch.id, "uploaded-batch");
+  assert.equal(queue.records[0].input.brand, "Uploaded Brand");
+  assert.deepEqual(queue.progress, { total: 1, verified: 0, pending: 1, complete: false });
 });
 
 test("verifies once, writes an exact Markdown handoff file, and completes the batch", async () => {
@@ -72,6 +84,7 @@ test("verifies once, writes an exact Markdown handoff file, and completes the ba
   const result = await store.verify("brand-1", {
     templateId: "fashion-week",
     title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
     input: { brand: "Example Brand", representative: "Example Person" },
     templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
     resolvedMarkdown,
@@ -83,10 +96,12 @@ test("verifies once, writes an exact Markdown handoff file, and completes the ba
   const handoff = await fs.readFile(contractPath, "utf8");
   assert.match(handoff, /^---\nschema_version: 1\nstatus: verified\ncontract_id: "batch-1:brand-1"/);
   assert.match(handoff, /template_id: "fashion-week"/);
+  assert.match(handoff, /title_template: "FLYING SOLO - \{\{BRAND_NAME\}\}"/);
   assert.match(handoff, /content_sha256: "[a-f0-9]{64}"/);
   assert.match(handoff, /## Definitions/);
   assert.match(handoff, /## Normalized input/);
   assert.match(handoff, /## Reviewed template Markdown/);
+  assert.match(handoff, /## Reviewed contract title template/);
   assert.match(handoff, /## Verified contract Markdown/);
   assert.match(handoff, new RegExp(resolvedMarkdown));
   assert.equal(await fs.access(archivePath).then(() => true, () => false), false);
@@ -94,10 +109,93 @@ test("verifies once, writes an exact Markdown handoff file, and completes the ba
     store.verify("brand-1", {
       templateId: "fashion-week",
       title: "Duplicate",
+      titleTemplate: "Duplicate",
       input: {},
       templateMarkdown: "duplicate",
       resolvedMarkdown: "duplicate",
     }),
     /already verified/i,
   );
+});
+
+test("editing verified sourced data marks the record for reverification", async () => {
+  const { store } = await setupStore();
+  await store.verify("brand-1", {
+    templateId: "fashion-week",
+    title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
+    input: { brand: "Example Brand", representative: "Example Person" },
+    templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
+    resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand",
+  });
+
+  const draft = await store.saveInput("brand-1", {
+    input: { brand: "Example Brand Revised", representative: "Example Person" },
+  });
+
+  assert.equal(draft.status, "changes_pending");
+  assert.equal(draft.verifiedAt, "2026-08-10T12:00:00.000Z");
+  assert.deepEqual((await store.getQueue()).progress, {
+    total: 1,
+    verified: 0,
+    pending: 1,
+    complete: false,
+  });
+});
+
+test("reverification atomically replaces one canonical handoff and records its revision", async () => {
+  const { store, verifiedContractsDirectory } = await setupStore();
+  const first = await store.verify("brand-1", {
+    templateId: "fashion-week",
+    title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
+    input: { brand: "Example Brand", representative: "Example Person" },
+    templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
+    resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand",
+  });
+  await store.saveInput("brand-1", {
+    input: { brand: "Example Brand Revised", representative: "Example Person" },
+  });
+  const revised = await store.verify("brand-1", {
+    templateId: "fashion-week",
+    title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand Revised",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}} revised",
+    input: { brand: "Example Brand Revised", representative: "Example Person" },
+    templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}} revised",
+    resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand Revised revised",
+  });
+
+  const files = await fs.readdir(verifiedContractsDirectory);
+  assert.deepEqual(files, ["batch-1--brand-1.md"]);
+  const handoff = await fs.readFile(path.join(verifiedContractsDirectory, files[0]), "utf8");
+  assert.match(handoff, /\nrevision: 2\n/);
+  assert.match(handoff, new RegExp(`supersedes_sha256: "${first.record.contentHash}"`));
+  assert.match(handoff, new RegExp(`content_sha256: "${revised.record.contentHash}"`));
+  assert.match(handoff, /Example Brand Revised revised/);
+});
+
+test("an identical retry recovers queue state without creating another revision", async () => {
+  const { store, queuePath, verifiedContractsDirectory } = await setupStore();
+  const completed = {
+    templateId: "fashion-week",
+    title: "FLYING SOLO - NYFW - Feb 2027 - Example Brand",
+    titleTemplate: "FLYING SOLO - {{BRAND_NAME}}",
+    input: { brand: "Example Brand", representative: "Example Person" },
+    templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}",
+    resolvedMarkdown: "## EVENT AGREEMENT\n\nExample Brand",
+  };
+  await store.verify("brand-1", completed);
+  const queue = JSON.parse(await fs.readFile(queuePath, "utf8"));
+  queue.records[0].status = "pending";
+  queue.records[0].verifiedAt = null;
+  await fs.writeFile(queuePath, `${JSON.stringify(queue, null, 2)}\n`);
+
+  const recovered = await store.verify("brand-1", completed);
+
+  assert.equal(recovered.record.status, "verified");
+  const files = await fs.readdir(verifiedContractsDirectory);
+  assert.deepEqual(files, ["batch-1--brand-1.md"]);
+  const handoff = await fs.readFile(path.join(verifiedContractsDirectory, files[0]), "utf8");
+  assert.match(handoff, /\nrevision: 1\n/);
+  assert.match(handoff, /\nsupersedes_sha256: null\n/);
 });

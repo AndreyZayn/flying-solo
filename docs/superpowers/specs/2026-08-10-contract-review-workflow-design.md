@@ -9,7 +9,7 @@ Turn the current one-contract builder into a local review queue where normalized
 In scope:
 
 - A registry that can hold multiple contract templates; Fashion Week remains the only implemented contract family for now.
-- Durable template saving with validation and timestamped history.
+- Durable template saving with validation; named copies are the revision mechanism.
 - A normalized batch/brand data boundary. Future XLS or agent parsing writes this shape; parsing itself is not implemented.
 - A visible queue of every brand record and its Pending or Verified status.
 - Preview-first review. Editor is opened only when Anna needs to change the selected contract.
@@ -29,7 +29,6 @@ Out of scope:
 - `data/review-queue.example.json`: documented normalized input example.
 - `data/runtime/review-queue.json`: active batch and per-brand review state.
 - `data/runtime/verified-contracts/<batch-id>--<record-id>.md`: one marked verified Markdown handoff file per contract for downstream SignatureConfirm agents.
-- `templates/history/<template-id>/`: timestamped template backups.
 
 The runtime directory is local operational data and is not pushed to GitHub.
 

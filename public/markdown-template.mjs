@@ -5,6 +5,7 @@ const IF_BLOCK_PATTERN = /\{\{#IF ([A-Z0-9_]+)\}\}([\s\S]*?)\{\{\/IF\}\}/g;
 const SIMPLE_TOKEN_PATTERN = /\{\{([A-Z0-9_]+)\}\}/g;
 const EDITOR_WIDGET_PATTERN = /\$\$widget\d+\s+([\s\S]*?)\$\$/g;
 const MARKDOWN_METACHARACTERS = new Set("\\`*_{}[]()<>#+-.!|~".split(""));
+const MARKDOWN_ESCAPE_PATTERN = /\\([\\`*_{}\[\]()<>#+.!|~\-])/g;
 
 function hasKey(context, key) {
   return Object.prototype.hasOwnProperty.call(context, key);
@@ -68,7 +69,7 @@ function validateTemplate(template, context) {
   if (openIf !== null) throw new Error(`Unclosed IF block: ${openIf}.`);
 }
 
-export function resolveMarkdownTemplate(template, context) {
+function resolveTemplate(template, context, resolveValue) {
   const source = String(template ?? "");
   const values = context && typeof context === "object" ? context : {};
   validateTemplate(source, values);
@@ -79,11 +80,20 @@ export function resolveMarkdownTemplate(template, context) {
   );
   const resolved = conditionsResolved.replace(
     SIMPLE_TOKEN_PATTERN,
-    (_token, key) => escapeMarkdownValue(values[key]),
+    (_token, key) => resolveValue(values[key]),
   );
 
   if (resolved.includes("{{") || resolved.includes("}}")) {
     throw new Error("Unresolved template token.");
   }
   return resolved;
+}
+
+export function resolveMarkdownTemplate(template, context) {
+  return resolveTemplate(template, context, escapeMarkdownValue);
+}
+
+export function resolveTextTemplate(template, context) {
+  const plainTextTemplate = String(template ?? "").replace(MARKDOWN_ESCAPE_PATTERN, "$1");
+  return resolveTemplate(plainTextTemplate, context, (value) => value == null ? "" : String(value));
 }
