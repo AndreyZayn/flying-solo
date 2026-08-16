@@ -5,12 +5,13 @@ The Agreement is between FLYING SOLO NYC INC., located at 419 Broome St, New Yor
 ## RECITALS
 
 FLYING SOLO is hosting the following event: “FLYING SOLO {{EVENT_CODE}} Show” in {{EVENT_MONTH}}, and **{{REPRESENTATIVE_NAME}}** (Brand’s Representative) of **{{BRAND_NAME}}** (Brand) desires to participate in the Event. In consideration of the mutual promises and covenants contained in this Agreement, the parties hereby agree as follows:
+
 **Please read carefully and electronically sign.**
 By agreeing to exhibit your collection you agree to the following conditions:
 
-### 1\. Relationship of the Parties\.
+### **1\. Relationship of the Parties\.**
 
-This Agreement does not create, and should not be interpreted as creating, a partnership or joint venture between the parties. However, the Brand and the Brand’s Representative are welcome to tag @flyingsolonyc on social media and use the FLYING SOLO’s logo when promoting the Event.
+This Agreement does not create, and should not be interpreted as creating, a partnership or joint venture between the parties. However, the Brand and the Brand’s Representative are welcome to tag **@flyingsolonyc** on social media and use the FLYING SOLO’s logo when promoting the Event.
 
 ### 2\. Professionalism\.
 
@@ -32,24 +33,21 @@ This Agreement begins on the date it is signed and executed. FLYING SOLO may ter
 
 The Brand or Brand’s Representative shall pay FLYING SOLO according to the following payment plan (the “Payment Plan”):
 
+<br>
 Full Participation Cost: {{FULL_PRICE}}
-
 {{#IF GRANT_ENABLED}}
 Fashion Forward Fund Grant Applied: {{GRANT_AMOUNT}}
 
 **Remaining Balance to be Paid by Designer: {{REMAINING_BALANCE}}**
 {{/IF}}
 
-* Payment #1 - Due: {{PAYMENT_1_DUE_DATE}} - {{PAYMENT_1_AMOUNT}}
-    {{#IF PAYMENT_2_ENABLED}}
-* Payment #2 - Due: {{PAYMENT_2_DUE_DATE}} - {{PAYMENT_2_AMOUNT}}
-    {{/IF}}
-    {{#IF PAYMENT_3_ENABLED}}
+* Payment #1 - Due: {{PAYMENT_1_DUE_DATE}} - {{PAYMENT_1_AMOUNT}}{{#IF PAYMENT_2_ENABLED}}
+* Payment #2 - Due: {{PAYMENT_2_DUE_DATE}} - {{PAYMENT_2_AMOUNT}}{{/IF}}{{#IF PAYMENT_3_ENABLED}}
 * Payment #3 - Due: {{PAYMENT_3_DUE_DATE}} - {{PAYMENT_3_AMOUNT}}
     {{/IF}}
 
 {{#IF ACCESSORY_ENABLED}}
-For Accessory/Jewelry brands only: Accessory participation requires collaborating with a clothing brand. If you prefer to present an independent lineup, please notify us promptly. In that case, participation must be upgraded to {{CLOTHING_FULL_PRICE}}.
+***For Accessory/Jewelry brands only:*** Accessory participation requires collaborating with a clothing brand. If you prefer to present an independent lineup, please notify us promptly. In that case, participation must be upgraded to {{CLOTHING_FULL_PRICE}}.
 {{/IF}}
 
 **b)** If the Brand or Brand’s Representative breaches their obligations, FLYING SOLO may terminate the Agreement with written notice. Before termination, FLYING SOLO will provide written notice of the breach and a reasonable opportunity to cure. If the breach is not cured, the Agreement and all obligations owed to the Brand or Brand’s Representative may be immediately terminated.
