@@ -90,7 +90,7 @@ export async function importFashionWeekWorkbook(buffer, { fileName = "upload.xls
       issues.push(error.message);
       input ??= { eventCode: text(get("FW")).toUpperCase(), brand: text(get("BRAND")), representative: text(get("NAME")), recipientEmail: text(get("EMAIL")), category: text(get("CATEGORY")), payments: [] };
     }
-    records.push({ id: rowId(rowNumber, input.brand), status: "pending", input, sourceRow: rowNumber, importIssues: issues, draftMarkdown: null, verifiedAt: null });
+    records.push({ id: rowId(rowNumber, input.brand), status: "pending", input, sourceRow: rowNumber, importIssues: issues, verifiedAt: null });
   }
   if (!records.length) throw new Error("Workbook contains no contract rows.");
   const importedAt = now();

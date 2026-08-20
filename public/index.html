@@ -43,6 +43,7 @@
             <button id="uploadWorkbook" class="primary-button" type="button">Start batch</button>
           </div>
           <p id="importSummary" class="import-summary">Choose a contract template. Fashion Week uses a workbook; Membership starts from local mock data.</p>
+          <p class="import-summary">To change contract wording, open Templates and create a named copy before editing it.</p>
         </section>
         <section class="review-queue-section" aria-labelledby="reviewQueueTitle">
           <div class="review-queue-header">
@@ -136,9 +137,9 @@
         </div>
 
         <div class="document-toolbar">
-          <div class="tabs">
+          <div id="documentTabs" class="tabs">
             <button id="previewTab" class="tab active" type="button" aria-pressed="true">Preview</button>
-            <button id="editorTab" class="tab" type="button" aria-pressed="false">Edit contract</button>
+            <button id="editorTab" class="tab" type="button" aria-pressed="false">Template editor</button>
           </div>
           <div class="document-actions">
             <button id="saveTemplate" class="secondary-button editor-only-action" type="button" hidden>Save changes</button>

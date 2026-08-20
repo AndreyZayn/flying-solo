@@ -10,6 +10,7 @@ import { importFashionWeekWorkbook } from "./src/workbook-importer.mjs";
 import { normalizeEditorMarkdown, resolveMarkdownTemplate, resolveTextTemplate } from "./public/markdown-template.mjs";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+const runtimeDir = path.join(rootDir, "data/runtime");
 const placeholderRegistryPromise = fs.readFile(
   path.join(rootDir, "config/fashion-week-placeholders.json"),
   "utf8",
@@ -17,11 +18,11 @@ const placeholderRegistryPromise = fs.readFile(
 const defaultTemplateStore = createTemplateStore({
   rootDir,
   registryPath: path.join(rootDir, "config/contract-templates.json"),
+  runtimeDir,
 });
 const defaultReviewStore = createReviewStore({
   examplePath: path.join(rootDir, "data/review-queue.example.json"),
-  queuePath: path.join(rootDir, "data/runtime/review-queue.json"),
-  verifiedContractsDirectory: path.join(rootDir, "data/runtime/verified-contracts"),
+  queuePath: path.join(runtimeDir, "review-queue.json"),
 });
 const staticFiles = new Map([
   ["/", [path.join(rootDir, "public/index.html"), "text/html; charset=utf-8"]],
@@ -196,15 +197,15 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
     const queue = {
       schemaVersion: 1,
       batch: { id: `membership-demo-${importedAt.replace(/[^0-9]/g, "").slice(0, 14)}`, label: "Membership template demo", templateId, importedAt, source: { type: "local-demo", note: "Mock data only" } },
-      records: [{ id: "mock-membership-brand", status: "pending", sourceRow: null, importIssues: [], draftMarkdown: null, verifiedAt: null, input: { brand: "Mock Membership Brand", representative: "Mock Representative", recipientEmail: "mock@example.com", packageId: "clothing-store-pr", durationMonths: 6, startDate: "2026-09-01" } }],
+      records: [{ id: "mock-membership-brand", status: "pending", sourceRow: null, importIssues: [], verifiedAt: null, input: { brand: "Mock Membership Brand", representative: "Mock Representative", recipientEmail: "mock@example.com", packageId: "clothing-store-pr", durationMonths: 6, startDate: "2026-09-01" } }],
     };
     return sendJson(response, 200, await reviewStore.replaceQueue(queue));
   }
-  const draftMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/draft$/);
-  if (draftMatch && request.method === "PUT") {
+  const inputMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/input$/);
+  if (inputMatch && request.method === "PUT") {
     try {
-      return sendJson(response, 200, await reviewStore.saveDraft(
-        decodeURIComponent(draftMatch[1]),
+      return sendJson(response, 200, await reviewStore.saveInput(
+        decodeURIComponent(inputMatch[1]),
         await readJson(request),
       ));
     } catch (error) {
@@ -214,9 +215,12 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   const verifyMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/verify$/);
   if (verifyMatch && request.method === "POST") {
     try {
-      const { input, templateMarkdown, templateId = "fashion-week", titleTemplate } = await readJson(request);
-      const result = await generatedContract(input, templateId, templateStore, titleTemplate);
-      const normalizedTemplate = normalizeEditorMarkdown(templateMarkdown);
+      const { input } = await readJson(request);
+      const queue = await reviewStore.getQueue();
+      const templateId = queue.batch.templateId;
+      const template = await templateStore.get(templateId);
+      const result = await generatedContract(input, templateId, templateStore, template.titleTemplate);
+      const normalizedTemplate = normalizeEditorMarkdown(template.markdown);
       const resolvedMarkdown = resolveMarkdownTemplate(normalizedTemplate, result.placeholders);
       return sendJson(response, 200, await reviewStore.verify(decodeURIComponent(verifyMatch[1]), {
         input,

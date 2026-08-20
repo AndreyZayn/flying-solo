@@ -12,7 +12,7 @@ function createReadOnlyReviewStore() {
       records: [{ id: "brand-1", status: "pending", input: {} }],
       progress: { total: 1, verified: 0, pending: 1, complete: false },
     }),
-    saveDraft: async () => { throw new Error("Read-only test review store"); },
+    saveInput: async () => { throw new Error("Read-only test review store"); },
     verify: async () => { throw new Error("Read-only test review store"); },
   };
 }
@@ -96,7 +96,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /id="editorPanel"[^>]+hidden/);
   assert.match(pageHtml, /id="previewPanel">/);
   assert.match(pageHtml, /id="previewTab"[^>]+class="tab active"[^>]*>Preview<\/button>/);
-  assert.match(pageHtml, /id="editorTab"[^>]*>Edit contract<\/button>/);
+  assert.match(pageHtml, /id="editorTab"[^>]*>Template editor<\/button>/);
   assert.match(pageHtml, /id="copyMarkdown"[^>]+disabled[^>]*>Copy Markdown<\/button>/);
   assert.match(pageHtml, /id="reviewQueueSelect"[^>]+aria-label="Select a contract"/);
   assert.match(pageHtml, /id="selectedRecordStatus"[^>]+class="review-selector-status"/);
@@ -204,7 +204,7 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(appSource, /reviewQueueSelect\.addEventListener\("change"/);
   assert.match(appSource, /nextIncompleteRecord\(reviewQueue\.records, record\.id\)/);
   assert.match(appSource, /\/api\/review-queue\/\$\{encodeURIComponent\(record\.id\)\}\/verify/);
-  assert.match(appSource, /async function verifyCurrentContract\(\)[\s\S]*?await saveCurrentDraft\(\);[\s\S]*?await generate\(\);/);
+  assert.match(appSource, /async function verifyCurrentContract\(\)[\s\S]*?await saveCurrentInput\(\);[\s\S]*?await generate\(\);/);
   assert.match(appSource, /\/api\/templates\/\$\{encodeURIComponent\(activeTemplateId\)\}/);
   assert.match(appSource, /method: "DELETE"/);
   assert.match(appSource, /renderTemplatePreview\(\)/);
@@ -297,7 +297,7 @@ test("generates title and Markdown placeholders through the local API", async (c
   assert.equal(result.placeholders.BRAND_NAME, "Example Brand");
 });
 
-test("persists review drafts and verifies the exact resolved contract through the API", async (context) => {
+test("persists review input and verifies with the batch's saved template through the API", async (context) => {
   let verified;
   let savedDraft;
   const reviewStore = {
@@ -308,7 +308,7 @@ test("persists review drafts and verifies the exact resolved contract through th
       records: [{ id: "brand-1", status: "pending", input: {} }],
       progress: { total: 1, verified: 0, pending: 1, complete: false },
     }),
-    saveDraft: async (id, draft) => { savedDraft = { id, ...draft }; return { id, status: "pending", ...draft }; },
+    saveInput: async (id, input) => { savedDraft = { id, ...input }; return { id, status: "pending", ...input }; },
     verify: async (id, contract) => {
       verified = { id, ...contract };
       return { record: { id, status: "verified" }, progress: { total: 1, verified: 1, pending: 0, complete: true } };
@@ -316,7 +316,7 @@ test("persists review drafts and verifies the exact resolved contract through th
   };
   const templateStore = {
     list: async () => [{ id: "fashion-week", label: "Fashion Week", family: "fashion-week" }],
-    get: async () => ({ id: "fashion-week", markdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n" }),
+    get: async () => ({ id: "fashion-week", family: "fashion-week", markdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n", titleTemplate: "Agreement — {{BRAND_NAME}}" }),
     save: async (_id, markdown) => ({ id: "fashion-week", markdown }),
   };
   const server = createAppServer({ reviewStore, templateStore });
@@ -341,14 +341,10 @@ test("persists review drafts and verifies the exact resolved contract through th
     ],
   };
 
-  const draftResponse = await fetch(`${baseUrl}/api/review-queue/brand-1/draft`, {
+  const draftResponse = await fetch(`${baseUrl}/api/review-queue/brand-1/input`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      input,
-      draftMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n",
-      draftTitleTemplate: "Agreement — {{BRAND_NAME}}",
-    }),
+    body: JSON.stringify({ input }),
   });
   assert.equal(draftResponse.status, 200);
   assert.equal(savedDraft.id, "brand-1");
@@ -358,9 +354,9 @@ test("persists review drafts and verifies the exact resolved contract through th
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       input,
-      templateId: "fashion-week",
-      templateMarkdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n",
-      titleTemplate: "Agreement — {{BRAND_NAME}}",
+      templateId: "untrusted-template-id",
+      templateMarkdown: "# Untrusted body",
+      titleTemplate: "Untrusted title",
     }),
   });
   assert.equal(verifyResponse.status, 200);

@@ -9,7 +9,7 @@ test("template workspace offers a preview and card-level deletion", () => {
   assert.match(html, /id="previewTab"[^>]*>Preview<\/button>/);
   assert.doesNotMatch(html, /id="deleteTemplate"/);
   assert.match(app, /previewTab\.hidden = false/);
-  assert.match(app, /const editorVisible = view === "editor"/);
+  assert.match(app, /const editorVisible = workspaceMode === "templates" && view === "editor"/);
   assert.match(app, /if \(workspaceMode === "templates"\) \{\s*renderTemplatePreview\(\);\s*return;\s*\}/s);
   assert.match(app, /try \{ renderPreview\(\); \} catch \(error\) \{ showError\(error\); \}/);
   assert.match(app, /if \(workspaceMode === "templates" && view === "preview"\) showResult\(\);/);
@@ -56,4 +56,17 @@ test("uses one library and one batch template selector instead of contract types
   assert.match(app, /sourceTemplateId: templateSourceSelect\.value/);
   assert.doesNotMatch(app, /contractTypeSelect/);
   assert.match(app, /templateManager\.hidden = !templates/);
+});
+
+test("keeps batch review to sourced data and a resolved preview", () => {
+  assert.match(html, /id="documentTabs"/);
+  assert.match(html, /id="editorTab"[^>]*>Template editor<\/button>/);
+  assert.doesNotMatch(html, />Edit contract</);
+  assert.match(app, /documentTabs\.hidden = !templates/);
+  assert.match(app, /const inputEditable = workspaceMode === "batch"/);
+  assert.match(app, /function activeTemplateMarkdown\(\) \{[\s\S]*workspaceMode === "templates"/);
+  assert.doesNotMatch(app, /record\.draftMarkdown \|\| templateMarkdown/);
+  assert.doesNotMatch(app, /record\.draftTitleTemplate \|\| templateTitle/);
+  assert.doesNotMatch(app, /Unable to save draft\./);
+  assert.match(app, /\/api\/review-queue\/\$\{encodeURIComponent\(record\.id\)\}\/input/);
 });

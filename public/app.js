@@ -33,6 +33,7 @@ const errorElement = document.querySelector("#errorMessage");
 const statusBadge = document.querySelector("#statusBadge");
 const editorTab = document.querySelector("#editorTab");
 const previewTab = document.querySelector("#previewTab");
+const documentTabs = document.querySelector("#documentTabs");
 const copyMarkdownButton = document.querySelector("#copyMarkdown");
 const copyTitleButton = document.querySelector("#copyTitle");
 const toast = document.querySelector("#toast");
@@ -80,7 +81,7 @@ let templateTitle = "";
 let templateCatalog = [];
 let activeEditor = "body";
 let renderTimer;
-let draftSaveTimer;
+let inputSaveTimer;
 let editorHeightFrame;
 let editorManuallySized = false;
 let generateController;
@@ -197,7 +198,15 @@ function selectedRecord() {
 }
 
 function activeTitleTemplate() {
-  return normalizeEditorMarkdown(titleEditor?.getMarkdown() ?? templateTitle).trim();
+  return workspaceMode === "templates"
+    ? normalizeEditorMarkdown(titleEditor?.getMarkdown() ?? templateTitle).trim()
+    : templateTitle;
+}
+
+function activeTemplateMarkdown() {
+  return normalizeEditorMarkdown(
+    workspaceMode === "templates" ? contractEditor?.getMarkdown() ?? templateMarkdown : templateMarkdown,
+  );
 }
 
 function activeTemplate() {
@@ -263,8 +272,12 @@ function setWorkspace(mode) {
   batchWorkspaceButton.classList.toggle("active", !templates);
   templateWorkspaceButton.setAttribute("aria-pressed", String(templates));
   batchWorkspaceButton.setAttribute("aria-pressed", String(!templates));
+  documentTabs.hidden = !templates;
+  editorTab.hidden = !templates;
+  previewTab.hidden = !templates;
+  if (!templates) view = "preview";
   titleCaption.textContent = templates ? "Contract title template" : "Contract title";
-  editorTab.textContent = templates ? "Template editor" : "Edit contract";
+  editorTab.textContent = "Template editor";
   previewTab.textContent = templates ? "Preview template" : "Preview";
   previewTab.hidden = false;
   previewTab.disabled = !templates && !currentResult;
@@ -309,7 +322,7 @@ async function loadTemplate(templateId, { loadRecord = false } = {}) {
 }
 
 function syncFieldEditability() {
-  const inputEditable = workspaceMode === "batch" && view === "editor";
+  const inputEditable = workspaceMode === "batch";
   form.querySelectorAll("input, select").forEach((control) => { control.disabled = !inputEditable; });
 }
 
@@ -438,9 +451,7 @@ function enableEditorSizing() {
   contractEditor.on("change", fitEditorToDocument);
   contractEditor.on("change", () => {
     refreshPlaceholderFormatting();
-    if (loadingRecord || workspaceMode !== "batch" || view !== "editor") return;
-    markSelectedRecordChanged();
-    scheduleDraftSave();
+    if (loadingRecord || workspaceMode !== "templates") return;
   });
   window.addEventListener("resize", fitEditorToDocument);
   editorResizeHandle.addEventListener("pointerdown", beginEditorResize);
@@ -449,8 +460,7 @@ function enableEditorSizing() {
 
 function resolvedMarkdown() {
   if (!currentResult) throw new Error("Complete the contract fields before previewing.");
-  const templateMarkdown = normalizeEditorMarkdown(contractEditor.getMarkdown());
-  return resolveMarkdownTemplate(templateMarkdown, currentResult.placeholders);
+  return resolveMarkdownTemplate(activeTemplateMarkdown(), currentResult.placeholders);
 }
 
 function renderedContractHtml(markdown) {
@@ -492,7 +502,7 @@ function renderPreview() {
 
 async function renderTemplatePreview() {
   const revision = ++templatePreviewRevision;
-  const normalizedTemplate = normalizeEditorMarkdown(contractEditor.getMarkdown());
+  const normalizedTemplate = activeTemplateMarkdown();
   const sampleInput = templatePreviewInput({ family: activeFamily(), registry });
   templatePreviewResult = undefined;
   copyTitleButton.disabled = true;
@@ -529,7 +539,7 @@ async function renderTemplatePreview() {
 }
 
 function showResult() {
-  const editorVisible = view === "editor";
+  const editorVisible = workspaceMode === "templates" && view === "editor";
   if (workspaceMode === "templates" && editorVisible) renderTemplateTitle();
   if (currentResult && workspaceMode === "batch") titleElement.textContent = currentResult.title;
   const templateEditor = workspaceMode === "templates" && editorVisible;
@@ -596,44 +606,36 @@ async function refreshReviewQueue() {
   renderReviewQueue();
 }
 
-async function saveCurrentDraft({ quiet = true } = {}) {
+async function saveCurrentInput({ quiet = true } = {}) {
   const record = selectedRecord();
-  if (!record || !contractEditor) return;
-  const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/draft`, {
+  if (!record) return;
+  const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/input`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      input: readInput(),
-      draftMarkdown: normalizeEditorMarkdown(contractEditor.getMarkdown()),
-      draftTitleTemplate: activeTitleTemplate(),
-    }),
+    body: JSON.stringify({ input: readInput() }),
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "Unable to save draft.");
+  if (!response.ok) throw new Error(body.error || "Unable to save sourced data.");
   Object.assign(record, body);
   renderReviewQueue();
   updateVerificationAction();
-  if (!quiet) showToast("Draft saved");
+  if (!quiet) showToast("Sourced data saved");
 }
 
-function scheduleDraftSave() {
-  clearTimeout(draftSaveTimer);
-  draftSaveTimer = setTimeout(() => saveCurrentDraft().catch(showError), 700);
+function scheduleInputSave() {
+  clearTimeout(inputSaveTimer);
+  inputSaveTimer = setTimeout(() => saveCurrentInput().catch(showError), 700);
 }
 
 async function selectRecord(recordId, { savePrevious = true } = {}) {
   if (recordId === selectedRecordId && selectedRecordId) return;
-  clearTimeout(draftSaveTimer);
-  if (savePrevious) await saveCurrentDraft();
+  clearTimeout(inputSaveTimer);
+  if (savePrevious) await saveCurrentInput();
   selectedRecordId = recordId;
   const record = selectedRecord();
   if (!record) throw new Error(`Unknown review record: ${recordId}.`);
-  activeTemplateId = reviewQueue.batch.templateId;
+  if (activeTemplateId !== reviewQueue.batch.templateId) await loadTemplate(reviewQueue.batch.templateId);
   writeInput(record.input);
-  loadingRecord = true;
-  contractEditor.setMarkdown(record.draftMarkdown || templateMarkdown, false);
-  titleEditor.setMarkdown(record.draftTitleTemplate || templateTitle, false);
-  loadingRecord = false;
   editorManuallySized = false;
   view = "preview";
   syncFieldEditability();
@@ -709,7 +711,7 @@ async function deleteTemplate(template = activeTemplate()) {
 async function verifyCurrentContract() {
   const record = selectedRecord();
   if (!record || record.status === "verified") return;
-  await saveCurrentDraft();
+  await saveCurrentInput();
   await generate();
   if (!currentResult) throw new Error("Resolve contract errors before verification.");
   const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/verify`, {
@@ -717,9 +719,6 @@ async function verifyCurrentContract() {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       input: readInput(),
-      templateId: activeTemplateId,
-      templateMarkdown: normalizeEditorMarkdown(contractEditor.getMarkdown()),
-      titleTemplate: activeTitleTemplate(),
     }),
   });
   const body = await response.json();
@@ -792,7 +791,7 @@ function scheduleGenerate() {
   errorElement.hidden = true;
   if (view === "preview") documentElement.replaceChildren();
   renderTimer = setTimeout(generate, 120);
-  scheduleDraftSave();
+  scheduleInputSave();
 }
 
 function showToast(message) {
@@ -1058,9 +1057,6 @@ async function initialize() {
   document.querySelector("#titleWysiwygEditor").addEventListener("focusin", () => { activeEditor = "title"; });
   titleEditor.on("change", () => {
     refreshPlaceholderFormatting();
-    if (loadingRecord || workspaceMode !== "batch" || view !== "editor") return;
-    markSelectedRecordChanged();
-    scheduleDraftSave();
   });
   renderReviewQueue();
   await loadTemplate(activeTemplateId);

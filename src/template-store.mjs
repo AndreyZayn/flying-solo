@@ -5,10 +5,12 @@ import { resolveMarkdownTemplate } from "../public/markdown-template.mjs";
 
 const TEMPLATE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-function safePath(rootDir, relativePath) {
-  const resolved = path.resolve(rootDir, relativePath);
-  const root = `${path.resolve(rootDir)}${path.sep}`;
-  if (!resolved.startsWith(root)) throw new Error("Template path must stay inside the application directory.");
+function safePath(rootDir, runtimeDir, filename) {
+  const resolved = path.resolve(rootDir, filename);
+  const allowedRoots = [rootDir, runtimeDir].map((directory) => `${path.resolve(directory)}${path.sep}`);
+  if (!allowedRoots.some((root) => resolved.startsWith(root))) {
+    throw new Error("Template path must stay inside the application or local data directory.");
+  }
   return resolved;
 }
 
@@ -104,7 +106,13 @@ function templateIdFromLabel(label, existingIds) {
   return candidate;
 }
 
-export function createTemplateStore({ rootDir, registryPath, statePath = path.join(rootDir, "data/runtime/template-library.json"), now = () => new Date().toISOString() }) {
+export function createTemplateStore({
+  rootDir,
+  registryPath,
+  runtimeDir = path.join(rootDir, "data/runtime"),
+  statePath = path.join(runtimeDir, "template-library.json"),
+  now = () => new Date().toISOString(),
+}) {
   let mutation = Promise.resolve();
 
   function locked(operation) {
@@ -162,7 +170,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       throw new Error(`Template requires a ${requiredHeading} heading.`);
     }
     const placeholders = JSON.parse(await fs.readFile(
-      safePath(rootDir, template.placeholderRegistryFile),
+      safePath(rootDir, runtimeDir, template.placeholderRegistryFile),
       "utf8",
     ));
     const context = Object.fromEntries(placeholders.map((placeholder) => [
@@ -180,7 +188,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     if (!normalized) throw new Error("Contract title cannot be empty.");
     if (/\r|\n/.test(normalized)) throw new Error("Contract title must stay on one line.");
     const placeholders = JSON.parse(await fs.readFile(
-      safePath(rootDir, template.placeholderRegistryFile),
+      safePath(rootDir, runtimeDir, template.placeholderRegistryFile),
       "utf8",
     ));
     const context = Object.fromEntries(placeholders.map((placeholder) => [
@@ -194,7 +202,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
     const template = await definition(templateId);
     return {
       ...publicTemplate(template),
-      markdown: await fs.readFile(safePath(rootDir, template.templateFile), "utf8"),
+      markdown: await fs.readFile(safePath(rootDir, runtimeDir, template.templateFile), "utf8"),
       titleTemplate: template.titleTemplate,
     };
   }
@@ -218,7 +226,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
 
   async function placeholders(templateId) {
     const template = await definition(templateId);
-    return JSON.parse(await fs.readFile(safePath(rootDir, template.placeholderRegistryFile), "utf8"));
+    return JSON.parse(await fs.readFile(safePath(rootDir, runtimeDir, template.placeholderRegistryFile), "utf8"));
   }
 
   async function save(templateId, content) {
@@ -227,7 +235,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       const next = normalizedContent(content, template);
       await validateMarkdown(template, next.markdown);
       await validateTitleTemplate(template, next.titleTemplate);
-      const filename = safePath(rootDir, template.templateFile);
+      const filename = safePath(rootDir, runtimeDir, template.templateFile);
       const library = await state();
       await writeAtomic(filename, next.markdown);
       if (template.builtIn) {
@@ -253,7 +261,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       const [library, existing] = await Promise.all([state(), list()]);
       const id = templateIdFromLabel(normalizedLabel, new Set(existing.map((template) => template.id)));
       const createdAt = now();
-      const templateFile = `data/runtime/templates/${id}.md`;
+      const templateFile = path.join(runtimeDir, "templates", `${id}.md`);
       library.customTemplates.push({
         id,
         label: normalizedLabel,
@@ -263,7 +271,10 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
         createdAt,
         updatedAt: createdAt,
       });
-      await writeAtomic(safePath(rootDir, templateFile), await fs.readFile(safePath(rootDir, source.templateFile), "utf8"));
+      await writeAtomic(
+        safePath(rootDir, runtimeDir, templateFile),
+        await fs.readFile(safePath(rootDir, runtimeDir, source.templateFile), "utf8"),
+      );
       await writeJsonAtomic(statePath, library);
       return get(id);
     });
@@ -287,7 +298,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
         return { id: standard.id, label: standard.label, deleted: true };
       }
       const template = await definition(templateId);
-      if (template.templateFile !== `data/runtime/templates/${template.id}.md`) {
+      if (template.templateFile !== path.join(runtimeDir, "templates", `${template.id}.md`)) {
         throw new Error("Custom template storage path is invalid.");
       }
       const nextTemplates = library.customTemplates.filter((candidate) => candidate.id !== template.id);
@@ -296,7 +307,7 @@ export function createTemplateStore({ rootDir, registryPath, statePath = path.jo
       }
       await writeJsonAtomic(statePath, { ...library, customTemplates: nextTemplates });
       await Promise.all([
-        fs.rm(safePath(rootDir, template.templateFile), { force: true }),
+        fs.rm(safePath(rootDir, runtimeDir, template.templateFile), { force: true }),
       ]);
       return { id: template.id, label: template.label, deleted: true };
     });

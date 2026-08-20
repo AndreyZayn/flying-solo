@@ -1,6 +1,6 @@
 # Flying Solo Contract Review
 
-A localhost-only workspace for preparing reusable templates, reviewing batches, verifying contracts, and storing handoffs. It supports Fashion Week workbook batches and a local Membership mock through one contract-family registry.
+A local web workspace for preparing reusable templates, reviewing batches, and verifying contracts. It supports Fashion Week workbook batches and a local Membership mock through one contract-family registry.
 
 ## Run
 
@@ -20,7 +20,7 @@ The supplied `8.9.26_FW.xlsx` sample imports 29 records. Nine source rows (19–
 
 ## Supported template families
 
-`config/contract-templates.json` registers each family, its protected Markdown template, required heading, required placeholders, and placeholder registry. The shared UI and verified-Markdown handoff stay the same; each family has an independent engine and catalog.
+`config/contract-templates.json` registers each family, its protected Markdown template, required heading, required placeholders, and placeholder registry. The shared UI and local review queue stay the same; each family has an independent engine and catalog.
 
 - **Fashion Week** uses the uploaded workbook, category prices, grant difference, and up to three source payment pairs.
 - **Membership** uses the approved package/duration catalog, derives the inclusive term end and cancellation deadline, and renders the protected Membership agreement. Selecting a Membership template in **Start a batch** loads local mock data, so the workflow can be tested without a real brand.
@@ -38,21 +38,34 @@ Each template has two editable parts:
 
 Saving updates the selected template in place. There is no automatic version number, history, restore action, or snapshot file.
 
-The same title/body editors are available from batch review. Per-record title and body edits remain drafts until verification; the verified handoff preserves both the resolved title and the reviewed title template.
+Batch review exposes only sourced record data and a resolved preview. Reusable title and body changes happen in **Templates**, then the selected template is used for the batch.
 
-## Temporary verified-contract handoff
+## Local verification state
 
-Each run uses local temporary files only. When Anna marks a contract verified, the app creates one Markdown file at `data/runtime/verified-contracts/<batch-id>--<record-id>.md`.
+When Anna marks a contract verified, the app revalidates the current record and saves its verified status in the local review queue. A later source-data edit changes the status to `changes_pending` until it is verified again.
 
-Every handoff file is marked `status: verified` in YAML frontmatter and contains the normalized Flying Solo input, reviewed title template, reviewed body Markdown, resolved title, exact resolved contract Markdown, reviewer/time, and SHA-256 hash. A SignatureConfirm agent may use only the **Verified contract Markdown** section from these files to create a draft; it must not alter the file or use a pending review record.
+Contract Builder has no downstream automation, installable skill, native package, or connection to SignatureConfirm, Square, Airtable, or a workbook. Use **Copy Markdown** when a reviewed contract needs to be pasted manually into another tool.
 
-`data/runtime/` is ignored by Git and may be removed after the run is complete and the needed SignatureConfirm drafts have been created.
+`data/runtime/` is ignored by Git because it contains local operational data. Remove it only when its local queue and saved-template data are no longer needed.
 
 ## Test
 
 ```bash
 npm test
 ```
+
+## Use from GitHub
+
+Clone the repository, install dependencies, then run the local server:
+
+```bash
+git clone https://github.com/AndreyZayn/flying-solo.git
+cd flying-solo
+npm install
+npm start
+```
+
+Pull the shared branch before starting a new session. No app bundle or Codex skill needs to be installed.
 
 ## Source of truth
 
@@ -63,14 +76,14 @@ npm test
 - `config/fashion-week-placeholders.json` contains every placeholder shown in the sidebar, including its label, description, type, and visual group. Add or revise display metadata there; the server rejects duplicate, malformed, or out-of-sync keys.
 - Saving a template replaces its current title/body in place; named copies are the only revision mechanism.
 - The Editor is a visual WYSIWYG document backed by Markdown. Form fields resolve `{{PLACEHOLDER}}` values and `{{#IF FLAG}}…{{/IF}}` blocks only when Preview or Copy Markdown is used, so manual edits are preserved when form values change.
-- Copy Markdown places resolved Markdown and matching rich text on the clipboard. SignatureConfirm receives the rich formatting; plain-text destinations receive Markdown. Neither representation contains unresolved placeholder tokens.
+- Copy Markdown places resolved Markdown and matching rich text on the clipboard. Plain-text destinations receive Markdown. Neither representation contains unresolved placeholder tokens.
 
 ## Review data
 
 - `data/review-queue.example.json` documents the normalized input boundary. The Fashion Week `.xlsx` importer now creates this shape; future workbook families add their own parser without changing the queue contract.
 - On first run, the app copies that example to `data/runtime/review-queue.json`. Draft field values and per-brand template edits are saved there automatically.
-- Clicking **Mark verified** validates and writes one marked verified-contract Markdown handoff file under `data/runtime/verified-contracts/`.
-- `data/runtime/` is intentionally excluded from Git because it contains temporary operational brand data. Future SignatureConfirm agents should use only files marked `status: verified`; they must not use pending local drafts as a contract source.
+- Clicking **Mark verified** validates the resolved contract and records verified state in `data/runtime/review-queue.json`.
+- `data/runtime/` is intentionally excluded from Git because it contains local operational brand data; it is not an exchange format for another app or agent.
 - A batch is complete only when every record in its review queue is verified.
 - Preview mode shows sourced fields as read-only alongside the resolved contract. **Edit contract** unlocks fields and reveals the placeholder controls and visual editor.
 

@@ -2,12 +2,10 @@
 
 The Agreement is between FLYING SOLO NYC INC., located at 419 Broome St, New York, NY 10013 (“FLYING SOLO”), and the Brand’s Representative listed below (“Brand’s Representative”).
 
-### RECITALS
+## RECITALS
 
 FLYING SOLO is hosting the following event: “FLYING SOLO {{EVENT_CODE}} Show” in {{EVENT_MONTH}}, and **{{REPRESENTATIVE_NAME}}** (Brand’s Representative) of **{{BRAND_NAME}}** (Brand) desires to participate in the Event. In consideration of the mutual promises and covenants contained in this Agreement, the parties hereby agree as follows:
-
 **Please read carefully and electronically sign.**
-
 By agreeing to exhibit your collection you agree to the following conditions:
 
 ### 1\. Relationship of the Parties\.
