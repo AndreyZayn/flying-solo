@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "build:vendor": "esbuild src/vendor/toastui-browser-entry.mjs --bundle --minify --format=iife --target=safari15 --outfile=public/vendor/toastui-editor-all.min.js",
-    "package:mac": "node scripts/build-macos-package.mjs",
     "start": "node server.mjs",
     "test": "node --test"
   },
