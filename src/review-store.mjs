@@ -100,6 +100,25 @@ export function createReviewStore({
     });
   }
 
+  function validateArtifactReference(completed) {
+    if (!String(completed.verifiedAt ?? "").trim()) {
+      throw new Error("Verification requires the verification time of the persisted contract file.");
+    }
+    const artifact = completed.artifact;
+    for (const property of ["relativePath", "artifactStatus", "contentSha256", "fileSha256", "validatedAt"]) {
+      if (!String(artifact?.[property] ?? "").trim()) {
+        throw new Error("Verification requires the persisted artifact reference from the verified batch store.");
+      }
+    }
+    if (artifact.artifactStatus !== "valid" || !Number.isInteger(artifact.revision) || artifact.revision < 1) {
+      throw new Error("Verification requires a valid artifact reference with its revision.");
+    }
+    const verifiedBatch = completed.verifiedBatch;
+    if (!String(verifiedBatch?.relativeDirectory ?? "").trim() || !String(verifiedBatch?.createdAt ?? "").trim()) {
+      throw new Error("Verification requires the verified batch directory location.");
+    }
+  }
+
   async function verify(recordId, completed) {
     return locked(async () => {
       const queue = validateQueue(await readJson(queuePath));
@@ -115,17 +134,35 @@ export function createReviewStore({
       if (completed.resolvedMarkdown.includes("{{") || completed.resolvedMarkdown.includes("}}")) {
         throw new Error("Verified contract cannot contain unresolved placeholders.");
       }
-      const verifiedAt = now();
+      validateArtifactReference(completed);
       record.input = clone(completed.input);
       record.status = "verified";
-      record.verifiedAt = verifiedAt;
-      delete record.contentHash;
-      delete record.revision;
-      record.updatedAt = verifiedAt;
+      record.verifiedAt = completed.verifiedAt;
+      record.artifact = clone(completed.artifact);
+      record.updatedAt = now();
+      queue.batch.verifiedBatch = clone(completed.verifiedBatch);
       await writeJsonAtomic(queuePath, queue);
       return { record: clone(record), progress: progress(queue) };
     });
   }
 
-  return { initialize, getQueue, replaceQueue, saveInput, verify };
+  async function recordArtifact(recordId, { artifact, verifiedBatch, verifiedAt }) {
+    return locked(async () => {
+      const queue = validateQueue(await readJson(queuePath));
+      const record = queue.records.find((candidate) => candidate.id === recordId);
+      if (!record) throw new Error(`Unknown review record: ${recordId}.`);
+      if (record.status !== "verified") {
+        throw new Error("Recreating a verified file requires a verified record.");
+      }
+      validateArtifactReference({ artifact, verifiedBatch, verifiedAt: verifiedAt ?? record.verifiedAt });
+      record.artifact = clone(artifact);
+      if (verifiedAt) record.verifiedAt = verifiedAt;
+      record.updatedAt = now();
+      queue.batch.verifiedBatch = clone(verifiedBatch);
+      await writeJsonAtomic(queuePath, queue);
+      return clone(record);
+    });
+  }
+
+  return { initialize, getQueue, replaceQueue, saveInput, verify, recordArtifact };
 }
