@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { buildFamilyContract, familyConfig } from "./src/contract-families.mjs";
 import { createReviewStore } from "./src/review-store.mjs";
 import { createTemplateStore } from "./src/template-store.mjs";
+import { createVerifiedBatchStore } from "./src/verified-batch-store.mjs";
 import { importFashionWeekWorkbook } from "./src/workbook-importer.mjs";
 import { normalizeEditorMarkdown, resolveMarkdownTemplate, resolveTextTemplate } from "./public/markdown-template.mjs";
 
@@ -23,6 +24,10 @@ const defaultTemplateStore = createTemplateStore({
 const defaultReviewStore = createReviewStore({
   examplePath: path.join(rootDir, "data/review-queue.example.json"),
   queuePath: path.join(runtimeDir, "review-queue.json"),
+});
+const defaultVerifiedBatchStore = createVerifiedBatchStore({
+  baseDirectory: path.join(runtimeDir, "verified-batches"),
+  relativeBase: "data/runtime/verified-batches",
 });
 const staticFiles = new Map([
   ["/", [path.join(rootDir, "public/index.html"), "text/html; charset=utf-8"]],
@@ -113,7 +118,21 @@ async function generatedContract(input, templateId = "fashion-week", templateSto
   };
 }
 
-async function handleRequest(request, response, { reviewStore, templateStore }) {
+async function resolveVerifiedContract(input, templateId, templateStore) {
+  const template = await templateStore.get(templateId);
+  const result = await generatedContract(input, templateId, templateStore, template.titleTemplate);
+  const normalizedTemplate = normalizeEditorMarkdown(template.markdown);
+  return {
+    templateId,
+    title: result.title,
+    titleTemplate: result.titleTemplate,
+    input,
+    templateMarkdown: normalizedTemplate,
+    resolvedMarkdown: resolveMarkdownTemplate(normalizedTemplate, result.placeholders),
+  };
+}
+
+async function handleRequest(request, response, { reviewStore, templateStore, verifiedBatchStore }) {
   const url = new URL(request.url, "http://localhost");
   if (request.method === "GET" && url.pathname === "/api/config") {
     try {
@@ -175,6 +194,17 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   if (request.method === "GET" && url.pathname === "/api/review-queue") {
     return sendJson(response, 200, await reviewStore.getQueue());
   }
+  if (request.method === "GET" && url.pathname === "/api/verified-batch") {
+    try {
+      const queue = await reviewStore.getQueue();
+      return sendJson(response, 200, await verifiedBatchStore.reconcile({
+        batch: queue.batch,
+        expectedCount: queue.records.length,
+      }));
+    } catch (error) {
+      return sendJson(response, 500, { error: error.message });
+    }
+  }
   if (request.method === "POST" && url.pathname === "/api/import-workbook") {
     try {
       const templateId = url.searchParams.get("templateId") ?? "fashion-week";
@@ -216,20 +246,54 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   if (verifyMatch && request.method === "POST") {
     try {
       const { input } = await readJson(request);
+      const recordId = decodeURIComponent(verifyMatch[1]);
       const queue = await reviewStore.getQueue();
-      const templateId = queue.batch.templateId;
-      const template = await templateStore.get(templateId);
-      const result = await generatedContract(input, templateId, templateStore, template.titleTemplate);
-      const normalizedTemplate = normalizeEditorMarkdown(template.markdown);
-      const resolvedMarkdown = resolveMarkdownTemplate(normalizedTemplate, result.placeholders);
-      return sendJson(response, 200, await reviewStore.verify(decodeURIComponent(verifyMatch[1]), {
-        input,
-        templateId,
-        title: result.title,
-        titleTemplate: result.titleTemplate,
-        templateMarkdown: normalizedTemplate,
-        resolvedMarkdown,
+      const index = queue.records.findIndex((record) => record.id === recordId);
+      if (index === -1) return sendJson(response, 404, { error: `Unknown review record: ${recordId}.` });
+      if (queue.records[index].status === "verified") {
+        return sendJson(response, 409, { error: `${recordId} is already verified.` });
+      }
+      const contract = await resolveVerifiedContract(input, queue.batch.templateId, templateStore);
+      const persisted = await verifiedBatchStore.persistVerifiedContract({
+        batch: queue.batch,
+        record: { id: recordId, sequence: index + 1 },
+        contract,
+        expectedCount: queue.records.length,
+      });
+      return sendJson(response, 200, await reviewStore.verify(recordId, {
+        ...contract,
+        verifiedAt: persisted.verifiedAt,
+        artifact: persisted.artifact,
+        verifiedBatch: persisted.verifiedBatch,
       }));
+    } catch (error) {
+      return sendJson(response, 400, { error: error.message });
+    }
+  }
+  const recreateMatch = url.pathname.match(/^\/api\/review-queue\/([^/]+)\/recreate-artifact$/);
+  if (recreateMatch && request.method === "POST") {
+    try {
+      const recordId = decodeURIComponent(recreateMatch[1]);
+      const queue = await reviewStore.getQueue();
+      const index = queue.records.findIndex((record) => record.id === recordId);
+      if (index === -1) return sendJson(response, 404, { error: `Unknown review record: ${recordId}.` });
+      const record = queue.records[index];
+      if (record.status !== "verified") {
+        return sendJson(response, 409, { error: "Only a verified record's contract file can be recreated." });
+      }
+      const contract = await resolveVerifiedContract(record.input, queue.batch.templateId, templateStore);
+      const persisted = await verifiedBatchStore.persistVerifiedContract({
+        batch: queue.batch,
+        record: { id: recordId, sequence: index + 1 },
+        contract,
+        expectedCount: queue.records.length,
+      });
+      const updated = await reviewStore.recordArtifact(recordId, {
+        artifact: persisted.artifact,
+        verifiedBatch: persisted.verifiedBatch,
+        verifiedAt: persisted.verifiedAt,
+      });
+      return sendJson(response, 200, { record: updated, model: persisted.model });
     } catch (error) {
       return sendJson(response, 400, { error: error.message });
     }
@@ -252,10 +316,14 @@ async function handleRequest(request, response, { reviewStore, templateStore }) 
   sendJson(response, 404, { error: "Not found." });
 }
 
-export function createAppServer({ reviewStore = defaultReviewStore, templateStore = defaultTemplateStore } = {}) {
+export function createAppServer({
+  reviewStore = defaultReviewStore,
+  templateStore = defaultTemplateStore,
+  verifiedBatchStore = defaultVerifiedBatchStore,
+} = {}) {
   const ready = reviewStore.initialize();
   return http.createServer((request, response) => {
-    ready.then(() => handleRequest(request, response, { reviewStore, templateStore }))
+    ready.then(() => handleRequest(request, response, { reviewStore, templateStore, verifiedBatchStore }))
       .catch((error) => sendJson(response, 500, { error: error.message }));
   });
 }

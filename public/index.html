@@ -59,6 +59,24 @@
             <span id="selectedRecordStatus" class="review-selector-status"></span>
             <span id="selectedRecordContext" class="review-selector-context"></span>
           </div>
+          <section id="verifiedBatchPanel" class="verified-batch-panel" aria-labelledby="verifiedBatchTitle">
+            <div class="verified-batch-header">
+              <h3 id="verifiedBatchTitle">Verified batch</h3>
+              <span id="verifiedBatchStatus" class="verified-batch-status">Not started</span>
+            </div>
+            <p id="verifiedBatchLabel" class="verified-batch-label">Verified contract files are created as each contract is verified.</p>
+            <div id="verifiedBatchPathRow" class="verified-batch-path-row" hidden>
+              <code id="verifiedBatchPath" class="verified-batch-path"></code>
+              <button id="copyBatchPath" class="secondary-button" type="button">Copy path</button>
+            </div>
+            <p id="verifiedBatchProgress" class="verified-batch-progress">No verified files yet.</p>
+            <p id="verifiedBatchCompleted" class="verified-batch-completed" hidden></p>
+            <div id="selectedArtifactRow" class="verified-artifact-row" hidden>
+              <span id="selectedArtifactName" class="verified-artifact-name"></span>
+              <span id="selectedArtifactState" class="verified-artifact-state">Not created</span>
+            </div>
+            <button id="recreateArtifact" class="secondary-button recreate-artifact" type="button" hidden>Recreate verified file</button>
+          </section>
         </section>
 
         <div class="status-row">

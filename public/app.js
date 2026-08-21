@@ -55,6 +55,17 @@ const selectedRecordStatus = document.querySelector("#selectedRecordStatus");
 const selectedRecordContext = document.querySelector("#selectedRecordContext");
 const reviewProgress = document.querySelector("#reviewProgress");
 const batchComplete = document.querySelector("#batchComplete");
+const verifiedBatchStatusElement = document.querySelector("#verifiedBatchStatus");
+const verifiedBatchLabel = document.querySelector("#verifiedBatchLabel");
+const verifiedBatchPathRow = document.querySelector("#verifiedBatchPathRow");
+const verifiedBatchPath = document.querySelector("#verifiedBatchPath");
+const copyBatchPathButton = document.querySelector("#copyBatchPath");
+const verifiedBatchProgress = document.querySelector("#verifiedBatchProgress");
+const verifiedBatchCompleted = document.querySelector("#verifiedBatchCompleted");
+const selectedArtifactRow = document.querySelector("#selectedArtifactRow");
+const selectedArtifactName = document.querySelector("#selectedArtifactName");
+const selectedArtifactState = document.querySelector("#selectedArtifactState");
+const recreateArtifactButton = document.querySelector("#recreateArtifact");
 const verifyContractButton = document.querySelector("#verifyContract");
 const saveTemplateButton = document.querySelector("#saveTemplate");
 const batchTemplateSelect = document.querySelector("#batchTemplateSelect");
@@ -74,6 +85,7 @@ let titleEditor;
 let view = "preview";
 let workspaceMode = "templates";
 let reviewQueue;
+let verifiedBatch;
 let selectedRecordId;
 let activeTemplateId = "fashion-week";
 let templateMarkdown = "";
@@ -581,7 +593,7 @@ function renderReviewQueue() {
   const complete = total > 0 && pending === 0;
   reviewQueue.progress = { total, verified, pending, complete };
   reviewProgress.textContent = `${verified} of ${total} verified · ${pending} remaining`;
-  batchComplete.hidden = !complete;
+  renderBatchCompleteBanner();
   for (const record of reviewQueue.records) {
     const presentation = reviewRecordPresentation(record, activeFamily());
     const option = document.createElement("option");
@@ -596,6 +608,7 @@ function renderReviewQueue() {
   selectedRecordStatus.textContent = presentation ? `${presentation.symbol} ${presentation.label}` : "";
   selectedRecordStatus.className = `review-selector-status ${presentation?.state ?? ""}`;
   selectedRecordContext.textContent = presentation?.context ?? "";
+  renderVerifiedBatch();
 }
 
 async function refreshReviewQueue() {
@@ -604,6 +617,89 @@ async function refreshReviewQueue() {
   if (!response.ok) throw new Error(body.error || "Unable to load review queue.");
   reviewQueue = body;
   renderReviewQueue();
+}
+
+const VERIFIED_BATCH_STATUS_LABELS = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  complete: "Complete",
+  needs_attention: "Needs attention",
+};
+const ARTIFACT_STATE_LABELS = { valid: "Valid", missing: "Missing", invalid: "Invalid" };
+
+function selectedArtifactEntry() {
+  return verifiedBatch?.contracts?.find((entry) => entry.recordId === selectedRecordId);
+}
+
+function renderBatchCompleteBanner() {
+  if (!reviewQueue?.progress) return;
+  const queueComplete = reviewQueue.progress.complete;
+  batchComplete.hidden = !queueComplete;
+  if (!queueComplete) return;
+  if (verifiedBatch?.status === "complete") {
+    batchComplete.textContent = "All contracts verified and stored.";
+    batchComplete.className = "batch-complete";
+  } else {
+    batchComplete.textContent = "All contracts are verified, but the verified files need attention before this batch is complete.";
+    batchComplete.className = "batch-complete attention";
+  }
+}
+
+function renderVerifiedBatch() {
+  if (!verifiedBatch) return;
+  const status = verifiedBatch.status;
+  verifiedBatchStatusElement.textContent = VERIFIED_BATCH_STATUS_LABELS[status] ?? status;
+  verifiedBatchStatusElement.className = `verified-batch-status ${String(status).replaceAll("_", "-")}`;
+  const started = Boolean(verifiedBatch.relativeDirectory);
+  verifiedBatchLabel.textContent = started
+    ? `${verifiedBatch.label || "Batch"} · ${verifiedBatch.batchId} · created ${verifiedBatch.directoryDate}`
+    : "Verified contract files are created as each contract is verified.";
+  verifiedBatchPathRow.hidden = !started;
+  verifiedBatchPath.textContent = verifiedBatch.relativeDirectory ?? "";
+  verifiedBatchProgress.textContent = started
+    ? `${verifiedBatch.validCount} of ${verifiedBatch.expectedCount} verified files`
+    : "No verified files yet.";
+  const completed = status === "complete" && Boolean(verifiedBatch.completedAt);
+  verifiedBatchCompleted.hidden = !completed;
+  verifiedBatchCompleted.textContent = completed ? `Completed ${verifiedBatch.completedAt}` : "";
+  const record = selectedRecord();
+  const entry = selectedArtifactEntry();
+  selectedArtifactRow.hidden = !record;
+  if (record) {
+    selectedArtifactName.textContent = entry ? entry.relativePath.split("/").pop() : "No verified file";
+    const stateLabel = entry ? ARTIFACT_STATE_LABELS[entry.artifactStatus] ?? entry.artifactStatus : "Not created";
+    selectedArtifactState.textContent = entry
+      ? `${stateLabel} · rev ${entry.revision} · ${entry.contentSha256.slice(0, 10)}…`
+      : stateLabel;
+    selectedArtifactState.className = `verified-artifact-state ${entry ? entry.artifactStatus : "not-created"}`;
+  }
+  recreateArtifactButton.hidden = !(record?.status === "verified" && (!entry || entry.artifactStatus !== "valid"));
+  renderBatchCompleteBanner();
+}
+
+async function refreshVerifiedBatch() {
+  const response = await fetch("/api/verified-batch");
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "Unable to load the verified batch state.");
+  verifiedBatch = body;
+  renderVerifiedBatch();
+}
+
+async function recreateArtifact() {
+  const record = selectedRecord();
+  if (!record) return;
+  recreateArtifactButton.disabled = true;
+  try {
+    const response = await fetch(`/api/review-queue/${encodeURIComponent(record.id)}/recreate-artifact`, { method: "POST" });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "Unable to recreate the verified file.");
+    Object.assign(record, body.record);
+    verifiedBatch = body.model;
+    renderReviewQueue();
+    showToast("Verified file recreated");
+  } finally {
+    recreateArtifactButton.disabled = false;
+  }
 }
 
 async function saveCurrentInput({ quiet = true } = {}) {
@@ -724,6 +820,7 @@ async function verifyCurrentContract() {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Unable to verify contract.");
   await refreshReviewQueue();
+  await refreshVerifiedBatch();
   showToast("Contract verified and stored");
   const next = nextIncompleteRecord(reviewQueue.records, record.id);
   if (next) {
@@ -1034,6 +1131,8 @@ async function initialize() {
   });
   saveTemplateButton.addEventListener("click", () => saveTemplate().catch(showError));
   verifyContractButton.addEventListener("click", () => verifyCurrentContract().catch(showError));
+  copyBatchPathButton.addEventListener("click", () => copyText(verifiedBatch?.relativeDirectory, "Batch path copied").catch(showError));
+  recreateArtifactButton.addEventListener("click", () => recreateArtifact().catch(showError));
   reviewQueueSelect.addEventListener("change", () => selectRecord(reviewQueueSelect.value).catch(showError));
   placeholderSearch.addEventListener("input", renderPlaceholderLibrary);
   uploadWorkbookButton.addEventListener("click", () => uploadWorkbook().catch(showError));
@@ -1058,6 +1157,7 @@ async function initialize() {
   titleEditor.on("change", () => {
     refreshPlaceholderFormatting();
   });
+  await refreshVerifiedBatch();
   renderReviewQueue();
   await loadTemplate(activeTemplateId);
   setWorkspace("templates");
@@ -1080,6 +1180,7 @@ async function activateQueue(queue) {
   activeTemplateId = queue.batch.templateId;
   selectedRecordId = undefined;
   await loadTemplate(activeTemplateId);
+  await refreshVerifiedBatch();
   renderReviewQueue();
   view = "preview";
   setWorkspace("batch");

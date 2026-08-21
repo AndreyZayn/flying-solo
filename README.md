@@ -40,13 +40,31 @@ Saving updates the selected template in place. There is no automatic version num
 
 Batch review exposes only sourced record data and a resolved preview. Reusable title and body changes happen in **Templates**, then the selected template is used for the batch.
 
-## Local verification state
+## Local verification state and verified batches
 
-When Anna marks a contract verified, the app revalidates the current record and saves its verified status in the local review queue. A later source-data edit changes the status to `changes_pending` until it is verified again.
+When Anna marks a contract verified, the server regenerates and revalidates the resolved contract, then **immediately writes one verified Markdown contract file** into the active batch's dated directory before the queue records the verified status. A `verified` flag in the queue is never the only evidence — every verified record has a validated file on disk.
 
-Contract Builder has no downstream automation, installable skill, native package, or connection to SignatureConfirm, Square, Airtable, or a workbook. Use **Copy Markdown** when a reviewed contract needs to be pasted manually into another tool.
+Each batch owns one local, Git-ignored directory:
 
-`data/runtime/` is ignored by Git because it contains local operational data. Remove it only when its local queue and saved-template data are no longer needed.
+```text
+data/runtime/verified-batches/
+└── YYYY-MM-DD--<batch-id>/
+    ├── batch.json                      # atomic manifest: counts, status, per-contract health
+    └── contracts/
+        └── 001--<record-id>--<brand-slug>.md
+```
+
+- The directory date is the local date of the first successful verification; the location is stored with the active queue so it stays stable across restarts and reverification.
+- Every contract file keeps the `schema_version: 1`, `status: verified` envelope (normalized input, reviewed template Markdown, reviewed title template, resolved contract Markdown, content hash, revision, prior hash).
+- After writing, the file is read back, parsed, and validated (identifiers, sections, unresolved placeholders, content hash, file hash) before `batch.json` and the queue are updated.
+- Reverification atomically replaces the same stable file; the revision increments only when content changed, and an identical retry recovers without a duplicate revision.
+- Starting a new batch never deletes an earlier verified-batch directory.
+
+The **Verified batch** panel in the Contracts sidebar shows the batch directory path (with a copy control), `valid of expected` file progress, per-record artifact health, and a completion time only when every expected file exists and passes validation. Startup and every dashboard refresh reconcile the manifest with disk through the read-only `/api/verified-batch` endpoint: a missing or altered file flips the batch to **Needs attention**, drops it from the valid count, and exposes **Recreate verified file** on the affected verified record, which reruns the same server-side validation and atomic persistence path. The completion banner means both queue completion *and* verified-file health.
+
+A later source-data edit changes the record to `changes_pending` until it is verified again. Contract Builder still has no downstream automation, installable skill, native package, or connection to SignatureConfirm, Square, Airtable, or a workbook. Use **Copy Markdown** when a reviewed contract needs to be pasted manually into another tool.
+
+`data/runtime/` is ignored by Git because it contains local operational data, including the verified-batch directories. Remove it only when its local queue, saved-template, and verified-batch data are no longer needed.
 
 ## Test
 
@@ -82,9 +100,10 @@ Pull the shared branch before starting a new session. No app bundle or Codex ski
 
 - `data/review-queue.example.json` documents the normalized input boundary. The Fashion Week `.xlsx` importer now creates this shape; future workbook families add their own parser without changing the queue contract.
 - On first run, the app copies that example to `data/runtime/review-queue.json`. Draft field values and per-brand template edits are saved there automatically.
-- Clicking **Mark verified** validates the resolved contract and records verified state in `data/runtime/review-queue.json`.
-- `data/runtime/` is intentionally excluded from Git because it contains local operational brand data; it is not an exchange format for another app or agent.
-- A batch is complete only when every record in its review queue is verified.
+- Clicking **Mark verified** validates the resolved contract, writes and validates the verified contract file in `data/runtime/verified-batches/`, and only then records verified state (with the artifact path, revision, and hashes) in `data/runtime/review-queue.json`.
+- `data/runtime/review-queue.json` is an operational index, not a contract source: downstream tooling reads the verified Markdown contract files, never reconstructs a contract from queue state.
+- `data/runtime/` is intentionally excluded from Git because it contains local operational brand data.
+- A batch is complete only when every record in its review queue is verified **and** every expected verified contract file exists and passes validation.
 - Preview mode shows sourced fields as read-only alongside the resolved contract. **Edit contract** unlocks fields and reveals the placeholder controls and visual editor.
 
 ## Placeholder syntax

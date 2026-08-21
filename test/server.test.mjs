@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { createAppServer } from "../server.mjs";
+import { createReviewStore } from "../src/review-store.mjs";
+import { createVerifiedBatchStore } from "../src/verified-batch-store.mjs";
 
 function createReadOnlyReviewStore() {
   return {
@@ -14,6 +19,32 @@ function createReadOnlyReviewStore() {
     }),
     saveInput: async () => { throw new Error("Read-only test review store"); },
     verify: async () => { throw new Error("Read-only test review store"); },
+  };
+}
+
+function persistedFixture() {
+  return {
+    verifiedAt: "2026-08-21T10:00:00-04:00",
+    artifact: {
+      relativePath: "contracts/001--brand-1--example-brand.md",
+      artifactStatus: "valid",
+      revision: 1,
+      contentSha256: "a".repeat(64),
+      fileSha256: "b".repeat(64),
+      validatedAt: "2026-08-21T10:00:00-04:00",
+    },
+    verifiedBatch: {
+      relativeDirectory: "data/runtime/verified-batches/2026-08-21--batch",
+      createdAt: "2026-08-21T10:00:00-04:00",
+    },
+    model: { status: "in_progress", validCount: 1, expectedCount: 1, contracts: [] },
+  };
+}
+
+function unusedVerifiedBatchStore() {
+  return {
+    persistVerifiedContract: async () => { throw new Error("Verified batch store must not be used"); },
+    reconcile: async () => { throw new Error("Verified batch store must not be used"); },
   };
 }
 
@@ -103,6 +134,17 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(pageHtml, /id="selectedRecordContext"/);
   assert.doesNotMatch(pageHtml, /id="reviewQueue"/);
   assert.match(pageHtml, /id="reviewProgress"/);
+  assert.match(pageHtml, /id="verifiedBatchPanel"[^>]+class="verified-batch-panel"/);
+  assert.match(pageHtml, /id="verifiedBatchTitle"[^>]*>Verified batch<\/h3>/);
+  assert.match(pageHtml, /id="verifiedBatchLabel"/);
+  assert.match(pageHtml, /id="verifiedBatchPath"[^>]+class="verified-batch-path"/);
+  assert.match(pageHtml, /id="copyBatchPath"[^>]*>Copy path<\/button>/);
+  assert.match(pageHtml, /id="verifiedBatchProgress"/);
+  assert.match(pageHtml, /id="verifiedBatchStatus"/);
+  assert.match(pageHtml, /id="verifiedBatchCompleted"/);
+  assert.match(pageHtml, /id="selectedArtifactName"/);
+  assert.match(pageHtml, /id="selectedArtifactState"/);
+  assert.match(pageHtml, /id="recreateArtifact"[^>]*>Recreate verified file<\/button>/);
   assert.match(pageHtml, /id="verifyContract"[^>]*>Mark verified<\/button>/);
   assert.match(pageHtml, /id="saveTemplate"[^>]*>Save changes<\/button>/);
   assert.match(pageHtml, /id="templateWorkspace"/);
@@ -201,6 +243,12 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(appSource, /\/api\/import-workbook\?templateId=/);
   assert.match(appSource, /\/api\/demo\/membership/);
   assert.match(appSource, /fetch\("\/api\/review-queue"\)/);
+  assert.match(appSource, /fetch\("\/api\/verified-batch"\)/);
+  assert.match(appSource, /refreshVerifiedBatch\(\)/);
+  assert.match(appSource, /renderVerifiedBatch\(\)/);
+  assert.match(appSource, /recreate-artifact/);
+  assert.match(appSource, /Batch path copied/);
+  assert.match(appSource, /Verified file recreated/);
   assert.match(appSource, /reviewQueueSelect\.addEventListener\("change"/);
   assert.match(appSource, /nextIncompleteRecord\(reviewQueue\.records, record\.id\)/);
   assert.match(appSource, /\/api\/review-queue\/\$\{encodeURIComponent\(record\.id\)\}\/verify/);
@@ -259,6 +307,11 @@ test("serves the dashboard and registry", async (context) => {
   assert.match(styles, /\.placeholder-item\s*\{[^}]*border:/s);
   assert.match(styles, /\.placeholder-token\s*\{[^}]*font-family:/s);
   assert.match(styles, /\.review-selector-status\.verified\s*\{[^}]*color:\s*#2f6336/s);
+  assert.match(styles, /\.verified-batch-panel\s*\{[^}]*border/s);
+  assert.match(styles, /\.verified-batch-path\s*\{[^}]*font-family/s);
+  assert.match(styles, /\.verified-batch-status\.needs-attention\s*\{/s);
+  assert.match(styles, /\.verified-batch-status\.complete\s*\{/s);
+  assert.match(styles, /\.batch-complete\.attention\s*\{/s);
   assert.match(styles, /\.source-indicator\s*\{[^}]*color:\s*var\(--accent\)[^}]*font-size:/s);
   assert.match(styles, /\.source-indicator::after\s*\{[^}]*content:\s*attr\(data-tooltip\)[^}]*opacity:\s*0/s);
   assert.match(styles, /\.source-indicator:hover::after,[\s\S]*\.source-indicator:focus-visible::after\s*\{[^}]*opacity:\s*1/s);
@@ -297,21 +350,24 @@ test("generates title and Markdown placeholders through the local API", async (c
   assert.equal(result.placeholders.BRAND_NAME, "Example Brand");
 });
 
-test("persists review input and verifies with the batch's saved template through the API", async (context) => {
+test("verification persists the contract file first, then records the queue state with its artifact", async (context) => {
+  const callOrder = [];
   let verified;
   let savedDraft;
+  let persistedArguments;
   const reviewStore = {
     initialize: async () => {},
     getQueue: async () => ({
       schemaVersion: 1,
-      batch: { id: "batch", templateId: "fashion-week" },
-      records: [{ id: "brand-1", status: "pending", input: {} }],
-      progress: { total: 1, verified: 0, pending: 1, complete: false },
+      batch: { id: "batch", label: "Test batch", templateId: "fashion-week" },
+      records: [{ id: "brand-0", status: "verified", input: {} }, { id: "brand-1", status: "pending", input: {} }],
+      progress: { total: 2, verified: 1, pending: 1, complete: false },
     }),
     saveInput: async (id, input) => { savedDraft = { id, ...input }; return { id, status: "pending", ...input }; },
     verify: async (id, contract) => {
+      callOrder.push("verify");
       verified = { id, ...contract };
-      return { record: { id, status: "verified" }, progress: { total: 1, verified: 1, pending: 0, complete: true } };
+      return { record: { id, status: "verified" }, progress: { total: 2, verified: 2, pending: 0, complete: true } };
     },
   };
   const templateStore = {
@@ -319,7 +375,15 @@ test("persists review input and verifies with the batch's saved template through
     get: async () => ({ id: "fashion-week", family: "fashion-week", markdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n", titleTemplate: "Agreement — {{BRAND_NAME}}" }),
     save: async (_id, markdown) => ({ id: "fashion-week", markdown }),
   };
-  const server = createAppServer({ reviewStore, templateStore });
+  const verifiedBatchStore = {
+    persistVerifiedContract: async (persistInput) => {
+      callOrder.push("persist");
+      persistedArguments = persistInput;
+      return persistedFixture();
+    },
+    reconcile: async () => { throw new Error("not used"); },
+  };
+  const server = createAppServer({ reviewStore, templateStore, verifiedBatchStore });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
@@ -360,9 +424,208 @@ test("persists review input and verifies with the batch's saved template through
     }),
   });
   assert.equal(verifyResponse.status, 200);
+  assert.deepEqual(callOrder, ["persist", "verify"]);
+  assert.equal(persistedArguments.batch.id, "batch");
+  assert.deepEqual(persistedArguments.record, { id: "brand-1", sequence: 2 });
+  assert.equal(persistedArguments.expectedCount, 2);
+  assert.equal(persistedArguments.contract.templateMarkdown, "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n");
+  assert.equal(persistedArguments.contract.resolvedMarkdown, "## EVENT AGREEMENT\n\nExample Brand\n");
+  assert.equal(persistedArguments.contract.input.brand, "Example Brand");
   assert.equal(verified.id, "brand-1");
   assert.equal(verified.templateMarkdown, "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n");
   assert.equal(verified.title, "Agreement — Example Brand");
   assert.equal(verified.titleTemplate, "Agreement — {{BRAND_NAME}}");
   assert.equal(verified.resolvedMarkdown, "## EVENT AGREEMENT\n\nExample Brand\n");
+  assert.equal(verified.verifiedAt, "2026-08-21T10:00:00-04:00");
+  assert.deepEqual(verified.artifact, persistedFixture().artifact);
+  assert.deepEqual(verified.verifiedBatch, persistedFixture().verifiedBatch);
+});
+
+test("an already verified record is refused before any contract file is written", async (context) => {
+  const reviewStore = {
+    initialize: async () => {},
+    getQueue: async () => ({
+      schemaVersion: 1,
+      batch: { id: "batch", templateId: "fashion-week" },
+      records: [{ id: "brand-1", status: "verified", input: {} }],
+      progress: { total: 1, verified: 1, pending: 0, complete: true },
+    }),
+  };
+  const server = createAppServer({ reviewStore, verifiedBatchStore: unusedVerifiedBatchStore() });
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  context.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const response = await fetch(`${baseUrl}/api/review-queue/brand-1/verify`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ input: {} }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /already verified/i);
+});
+
+test("serves the sanitized verified-batch model through a read-only endpoint", async (context) => {
+  let reconciled;
+  const verifiedBatchStore = {
+    persistVerifiedContract: async () => { throw new Error("not used"); },
+    reconcile: async (reconcileInput) => {
+      reconciled = reconcileInput;
+      return { status: "in_progress", batchId: "batch", validCount: 1, expectedCount: 1, contracts: [] };
+    },
+  };
+  const server = createAppServer({ reviewStore: createReadOnlyReviewStore(), verifiedBatchStore });
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  context.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const response = await fetch(`${baseUrl}/api/verified-batch`);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "in_progress", batchId: "batch", validCount: 1, expectedCount: 1, contracts: [] });
+  assert.equal(reconciled.batch.id, "batch");
+  assert.equal(reconciled.expectedCount, 1);
+});
+
+test("recreating a verified file requires a verified record and reruns the persistence path", async (context) => {
+  let persistedArguments;
+  let repaired;
+  let recordStatus = "pending";
+  const reviewStore = {
+    initialize: async () => {},
+    getQueue: async () => ({
+      schemaVersion: 1,
+      batch: { id: "batch", templateId: "fashion-week", verifiedBatch: persistedFixture().verifiedBatch },
+      records: [{ id: "brand-1", status: recordStatus, input: { brand: "Example Brand" } }],
+      progress: { total: 1, verified: 1, pending: 0, complete: true },
+    }),
+    recordArtifact: async (id, reference) => {
+      repaired = { id, ...reference };
+      return { id, status: "verified", artifact: reference.artifact };
+    },
+  };
+  const templateStore = {
+    get: async () => ({ id: "fashion-week", family: "fashion-week", markdown: "## EVENT AGREEMENT\n\n{{BRAND_NAME}}\n", titleTemplate: "Agreement — {{BRAND_NAME}}" }),
+  };
+  const verifiedBatchStore = {
+    persistVerifiedContract: async (persistInput) => {
+      persistedArguments = persistInput;
+      return persistedFixture();
+    },
+    reconcile: async () => { throw new Error("not used"); },
+  };
+  const server = createAppServer({ reviewStore, templateStore, verifiedBatchStore });
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  context.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const refused = await fetch(`${baseUrl}/api/review-queue/brand-1/recreate-artifact`, { method: "POST" });
+  assert.equal(refused.status, 409);
+  assert.equal(persistedArguments, undefined);
+
+  recordStatus = "verified";
+  const generateInput = {
+    eventCode: "PFW", eventMonth: "February 2027", brand: "Example Brand", representative: "Example Person",
+    category: "Clothing", grantEnabled: false, grantAmount: 0,
+    payments: [{ dueDate: "2026-08-16", amount: 2300 }, { dueDate: "2026-10-15", amount: 2300 }, { dueDate: "2027-01-07", amount: 2300 }],
+  };
+  reviewStore.getQueue = async () => ({
+    schemaVersion: 1,
+    batch: { id: "batch", templateId: "fashion-week", verifiedBatch: persistedFixture().verifiedBatch },
+    records: [{ id: "brand-1", status: "verified", input: generateInput }],
+    progress: { total: 1, verified: 1, pending: 0, complete: true },
+  });
+  const response = await fetch(`${baseUrl}/api/review-queue/brand-1/recreate-artifact`, { method: "POST" });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.record.status, "verified");
+  assert.equal(body.model.status, "in_progress");
+  assert.deepEqual(persistedArguments.record, { id: "brand-1", sequence: 1 });
+  assert.equal(persistedArguments.contract.input.brand, "Example Brand");
+  assert.deepEqual(repaired.artifact, persistedFixture().artifact);
+  assert.equal(repaired.verifiedAt, "2026-08-21T10:00:00-04:00");
+});
+
+test("a real batch progresses, survives tampering, and completes truthfully end to end", async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "flying-solo-e2e-"));
+  const input = (brand) => ({
+    eventCode: "PFW",
+    eventMonth: "February 2027",
+    brand,
+    representative: "Example Person",
+    recipientEmail: "person@example.com",
+    category: "Clothing",
+    grantEnabled: true,
+    grantAmount: 2000,
+    payments: [
+      { dueDate: "2026-08-16", amount: 1700 },
+      { dueDate: "2026-10-15", amount: 1600 },
+      { dueDate: "2027-01-07", amount: 1600 },
+    ],
+  });
+  const examplePath = path.join(directory, "example.json");
+  await fs.writeFile(examplePath, JSON.stringify({
+    schemaVersion: 1,
+    batch: { id: "fashion-week-e2e", label: "E2E batch", templateId: "fashion-week" },
+    records: [
+      { id: "brand-one", status: "pending", input: input("Brand One"), verifiedAt: null },
+      { id: "brand-two", status: "pending", input: input("Brand Two"), verifiedAt: null },
+    ],
+  }));
+  const batchesDirectory = path.join(directory, "runtime", "verified-batches");
+  const reviewStore = createReviewStore({ examplePath, queuePath: path.join(directory, "runtime", "review-queue.json") });
+  const verifiedBatchStore = createVerifiedBatchStore({ baseDirectory: batchesDirectory });
+  const server = createAppServer({ reviewStore, verifiedBatchStore });
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  context.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const model = async () => (await fetch(`${baseUrl}/api/verified-batch`)).json();
+  const verify = async (id, brand) => fetch(`${baseUrl}/api/review-queue/${id}/verify`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ input: input(brand) }),
+  });
+
+  assert.equal((await model()).status, "not_started");
+
+  const first = await verify("brand-one", "Brand One");
+  assert.equal(first.status, 200);
+  const firstBody = await first.json();
+  assert.equal(firstBody.record.status, "verified");
+  assert.equal(firstBody.record.artifact.artifactStatus, "valid");
+  const afterFirst = await model();
+  assert.equal(afterFirst.status, "in_progress");
+  assert.equal(afterFirst.validCount, 1);
+  assert.equal(afterFirst.expectedCount, 2);
+  const batchDirectory = path.join(batchesDirectory, (await fs.readdir(batchesDirectory))[0]);
+  const firstFile = path.join(batchDirectory, firstBody.record.artifact.relativePath);
+  assert.match(await fs.readFile(firstFile, "utf8"), /^---\nschema_version: 1\nstatus: verified\n/);
+
+  const second = await verify("brand-two", "Brand Two");
+  assert.equal(second.status, 200);
+  const secondBody = await second.json();
+  const complete = await model();
+  assert.equal(complete.status, "complete");
+  assert.equal(complete.validCount, 2);
+  assert.ok(complete.completedAt);
+
+  const secondFile = path.join(batchDirectory, secondBody.record.artifact.relativePath);
+  await fs.writeFile(secondFile, "tampered", "utf8");
+  const tampered = await model();
+  assert.equal(tampered.status, "needs_attention");
+  assert.equal(tampered.validCount, 1);
+  assert.equal(tampered.completedAt, null);
+  assert.equal(tampered.contracts.find((entry) => entry.recordId === "brand-two").artifactStatus, "invalid");
+
+  const repair = await fetch(`${baseUrl}/api/review-queue/brand-two/recreate-artifact`, { method: "POST" });
+  assert.equal(repair.status, 200);
+  const repairedModel = await model();
+  assert.equal(repairedModel.status, "complete");
+  assert.equal(repairedModel.validCount, 2);
+  assert.match(await fs.readFile(secondFile, "utf8"), /^---\nschema_version: 1\nstatus: verified\n/);
+
+  const duplicate = await verify("brand-one", "Brand One");
+  assert.equal(duplicate.status, 409);
 });
